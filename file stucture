@@ -1,0 +1,77 @@
+sorath-masala/
+│
+├── backend/
+│   ├── src/
+│   │   ├── config/
+│   │   │   └── db.js                  # Database connection setup
+│   │   │
+│   │   ├── controllers/
+│   │   │   ├── admin.controller.js    # Admin authentication controller
+│   │   │   ├── auth.controller.js     # User authentication controller
+│   │   │   ├── inventory.controller.js # Inventory management controller
+│   │   │   └── item.controller.js     # Item management controller
+│   │   │
+│   │   ├── middleware/
+│   │   │   └── auth.middleware.js     # Authentication middleware
+│   │   │
+│   │   ├── models/
+│   │   │   ├── admin.model.js         # Admin user model
+│   │   │   ├── inventory.model.js     # Inventory model
+│   │   │   ├── inventoryHistory.model.js # Inventory history model
+│   │   │   ├── item.model.js          # Item model
+│   │   │   ├── otp.model.js           # OTP model
+│   │   │   └── user.model.js          # User model (salesman/dealer)
+│   │   │
+│   │   ├── routes/
+│   │   │   ├── admin.routes.js        # Admin routes
+│   │   │   ├── auth.routes.js         # Authentication routes
+│   │   │   ├── inventory.routes.js    # Inventory routes
+│   │   │   └── item.routes.js         # Item routes
+│   │   │
+│   │   ├── services/
+│   │   │   ├── admin.service.js       # Admin authentication service
+│   │   │   ├── inventory.service.js   # Inventory management service
+│   │   │   ├── item.service.js        # Item management service
+│   │   │   ├── otp.service.js         # OTP generation/verification
+│   │   │   └── user.service.js        # User management service
+│   │   │
+│   │   ├── utils/
+│   │   │   ├── jwt.util.js            # JWT token utilities
+│   │   │   └── sms.util.js            # SMS sending utilities
+│   │   │
+│   │   ├── app.js                     # Express app setup
+│   │   └── server.js                  # Server entry point
+│   │
+│   ├── .env                           # Environment variables
+│   ├── package.json                   # Backend dependencies
+│   └── database_schema.sql            # SQL schema
+│
+├── frontend/
+│   ├── public/
+│   │   ├── index.html                 # HTML template
+│   │   └── logo.jpg                   # App logo
+│   │
+│   ├── src/
+│   │   ├── components/                # Reusable UI components
+│   │   │
+│   │   ├── lib/
+│   │   │   └── utils.js               # Utility functions
+│   │   │
+│   │   ├── pages/
+│   │   │   ├── Dashboard.jsx          # Main dashboard
+│   │   │   ├── Inventory.jsx          # Inventory listing
+│   │   │   ├── InventoryHistory.jsx   # Inventory history
+│   │   │   ├── InventoryItem.jsx      # Inventory adjustment
+│   │   │   ├── ItemForm.jsx           # Add/edit item form
+│   │   │   ├── Items.jsx              # Items listing
+│   │   │   └── Login.jsx              # Admin login
+│   │   │
+│   │   ├── App.jsx                    # Route definitions
+│   │   ├── index.css                  # Global styles
+│   │   └── main.jsx                   # App entry point
+│   │
+│   ├── package.json                   # Frontend dependencies
+│   └── tailwind.config.js             # Tailwind CSS config
+│
+├── README.md                          # Project documentation
+└── .gitignore                         # Git ignore file
