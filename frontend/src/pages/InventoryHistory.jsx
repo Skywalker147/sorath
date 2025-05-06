@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import Layout from '../components/Layout';
+import { API_URL } from '../config';
 
 const InventoryHistory = () => {
   const { id } = useParams(); // Optional itemId if viewing history for a specific item
@@ -29,7 +30,7 @@ const InventoryHistory = () => {
         throw new Error('You are not authenticated');
       }
       
-      const response = await fetch(`http://localhost:4000/items/${id}`, {
+      const response = await fetch(`${API_URL}/items/${id}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }

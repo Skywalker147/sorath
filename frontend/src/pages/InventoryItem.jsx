@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import Layout from '../components/Layout';
+import { API_URL } from '../config';
 
 // Shadcn UI Components
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -60,7 +61,7 @@ const InventoryItem = () => {
         throw new Error('You are not authenticated');
       }
       
-      const response = await fetch(`http://localhost:4000/items/${id}/with-inventory`, {
+      const response = await fetch(`${API_URL}/items/${id}/with-inventory`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -88,7 +89,7 @@ const InventoryItem = () => {
         throw new Error('You are not authenticated');
       }
       
-      const response = await fetch(`http://localhost:4000/inventory/${id}/history?limit=5`, {
+      const response = await fetch(`${API_URL}/inventory/${id}/history?limit=5`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -124,7 +125,7 @@ const InventoryItem = () => {
         ? parseInt(adjustmentQuantity, 10) 
         : -parseInt(adjustmentQuantity, 10);
       
-      const response = await fetch(`http://localhost:4000/inventory/${id}/adjust`, {
+      const response = await fetch(`${API_URL}/inventory/${id}/adjust`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

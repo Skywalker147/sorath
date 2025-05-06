@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import Layout from '../components/Layout';
+import { API_URL } from '../config';
 
 // Shadcn UI Components
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -34,7 +35,7 @@ const Inventory = () => {
         throw new Error('You are not authenticated');
       }
       
-      const response = await fetch('http://localhost:4000/items/with-inventory', {
+      const response = await fetch(`${API_URL}/items/with-inventory`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
