@@ -1,20 +1,19 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import Layout from '../components/Layout';
 import { API_URL } from '../config';
 
 // Shadcn UI Components
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, Package, Eye, CheckCircle, XCircle, Clock, Trash2, Edit2 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { toast } from 'sonner';
+import { Loader2, Package, Eye, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Separator } from "@/components/ui/separator";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const Orders = () => {
   const [orders, setOrders] = useState([]);
@@ -22,9 +21,6 @@ const Orders = () => {
   const [error, setError] = useState(null);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showOrderDetails, setShowOrderDetails] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [showEditDialog, setShowEditDialog] = useState(false);
-  const [editingOrder, setEditingOrder] = useState(null);
 
   useEffect(() => {
     fetchOrders();
@@ -59,6 +55,27 @@ const Orders = () => {
     }
   };
 
+  const handleViewOrder = async (orderId) => {
+    try {
+      const token = localStorage.getItem('adminToken');
+      const response = await fetch(`${API_URL}/orders/${orderId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch order details');
+      }
+      
+      const order = await response.json();
+      setSelectedOrder(order);
+      setShowOrderDetails(true);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   const handleStatusChange = async (orderId, newStatus) => {
     try {
       const token = localStorage.getItem('adminToken');
@@ -70,61 +87,16 @@ const Orders = () => {
         },
         body: JSON.stringify({ status: newStatus })
       });
-
+      
       if (!response.ok) {
         throw new Error('Failed to update order status');
       }
-
-      toast.success('Order status updated successfully');
+      
+      // Refresh orders list
       fetchOrders();
+      setShowOrderDetails(false);
     } catch (err) {
-      toast.error(err.message);
-    }
-  };
-
-  const handleDeleteOrder = async (orderId) => {
-    try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch(`${API_URL}/orders/${orderId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete order');
-      }
-
-      toast.success('Order deleted successfully');
-      setShowDeleteConfirm(false);
-      fetchOrders();
-    } catch (err) {
-      toast.error(err.message);
-    }
-  };
-
-  const handleUpdateOrder = async (orderId, updatedData) => {
-    try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch(`${API_URL}/orders/${orderId}`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(updatedData)
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update order');
-      }
-
-      toast.success('Order updated successfully');
-      setShowEditDialog(false);
-      fetchOrders();
-    } catch (err) {
-      toast.error(err.message);
+      setError(err.message);
     }
   };
 
@@ -164,7 +136,7 @@ const Orders = () => {
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Order Management</h1>
               <p className="mt-1 text-sm text-gray-500">
-                View and manage orders from dealers and salesmen
+                View and manage customer orders
               </p>
             </div>
           </div>
@@ -180,38 +152,78 @@ const Orders = () => {
             <CardHeader>
               <CardTitle>All Orders</CardTitle>
               <CardDescription>
-                View and manage all orders in the system
+                View and manage all customer orders
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Order ID</TableHead>
-                    <TableHead>Customer</TableHead>
-                    <TableHead>Phone</TableHead>
-                    <TableHead>Total Amount</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+              <ScrollArea className="h-[600px]">
+                <div className="space-y-4">
                   {orders.map((order) => (
-                    <TableRow key={order.id}>
-                      <TableCell>#{order.id}</TableCell>
-                      <TableCell>{order.user_name}</TableCell>
-                      <TableCell>{order.phone_number}</TableCell>
-                      <TableCell>₹{order.total_amount}</TableCell>
-                      <TableCell>
+                    <div
+                      key={order.id}
+                      className="flex items-center justify-between p-4 bg-white rounded-lg border hover:shadow-md transition-shadow"
+                    >
+                      <div className="flex items-center space-x-4">
+                        <div className="p-2 bg-red-100 rounded-full">
+                          <Package className="h-6 w-6 text-red-600" />
+                        </div>
+                        <div>
+                          <h3 className="font-medium">Order #{order.id}</h3>
+                          <p className="text-sm text-gray-500">
+                            {new Date(order.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-4">
+                        <div className="text-right">
+                          <p className="font-medium">₹{order.total_amount}</p>
+                          <p className="text-sm text-gray-500">{order.user_name}</p>
+                        </div>
+                        {getStatusBadge(order.status)}
+                        <div className="flex space-x-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleViewOrder(order.id)}
+                          >
+                            <Eye className="h-4 w-4 mr-2" />
+                            View
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+
+          {/* Order Details Dialog */}
+          <Dialog open={showOrderDetails} onOpenChange={setShowOrderDetails}>
+            <DialogContent className="max-w-2xl">
+              {selectedOrder && (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Order Details #{selectedOrder.id}</DialogTitle>
+                    <DialogDescription>
+                      Order placed on {new Date(selectedOrder.created_at).toLocaleString()}
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <h4 className="font-medium text-sm text-gray-500">Customer</h4>
+                        <p>{selectedOrder.user_name}</p>
+                        <p className="text-sm text-gray-500">{selectedOrder.phone_number}</p>
+                      </div>
+                      <div>
+                        <h4 className="font-medium text-sm text-gray-500">Status</h4>
                         <Select
-                          defaultValue={order.status}
-                          onValueChange={(value) => handleStatusChange(order.id, value)}
+                          value={selectedOrder.status}
+                          onValueChange={(value) => handleStatusChange(selectedOrder.id, value)}
                         >
-                          <SelectTrigger className="w-[130px]">
-                            <SelectValue>
-                              {getStatusBadge(order.status)}
-                            </SelectValue>
+                          <SelectTrigger className="w-[180px]">
+                            <SelectValue placeholder="Select status" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="pending">Pending</SelectItem>
@@ -220,203 +232,39 @@ const Orders = () => {
                             <SelectItem value="cancelled">Cancelled</SelectItem>
                           </SelectContent>
                         </Select>
-                      </TableCell>
-                      <TableCell>
-                        {new Date(order.created_at).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedOrder(order);
-                              setShowOrderDetails(true);
-                            }}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setEditingOrder(order);
-                              setShowEditDialog(true);
-                            }}
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedOrder(order);
-                              setShowDeleteConfirm(true);
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4 text-red-500" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                      </div>
+                    </div>
+                    <Separator />
+                    <div>
+                      <h4 className="font-medium text-sm text-gray-500 mb-2">Order Items</h4>
+                      <div className="space-y-2">
+                        {selectedOrder.items.map((item) => (
+                          <div key={item.id} className="flex justify-between items-center">
+                            <div>
+                              <p className="font-medium">{item.item_name}</p>
+                              <p className="text-sm text-gray-500">
+                                {item.quantity} x ₹{item.price_per_unit}
+                              </p>
+                            </div>
+                            <p className="font-medium">₹{item.total_price}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <Separator />
+                    <div className="flex justify-between items-center">
+                      <h4 className="font-medium">Total Amount</h4>
+                      <p className="text-xl font-bold">₹{selectedOrder.total_amount}</p>
+                    </div>
+                  </div>
+                </>
+              )}
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
-
-      {/* Order Details Dialog */}
-      <Dialog open={showOrderDetails} onOpenChange={setShowOrderDetails}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Order Details #{selectedOrder?.id}</DialogTitle>
-            <DialogDescription>
-              View complete order information and items
-            </DialogDescription>
-          </DialogHeader>
-          
-          {selectedOrder && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <h3 className="font-medium text-gray-500">Customer Information</h3>
-                  <p className="mt-1">Name: {selectedOrder.user_name}</p>
-                  <p>Phone: {selectedOrder.phone_number}</p>
-                </div>
-                <div>
-                  <h3 className="font-medium text-gray-500">Order Information</h3>
-                  <p className="mt-1">Status: {getStatusBadge(selectedOrder.status)}</p>
-                  <p>Date: {new Date(selectedOrder.created_at).toLocaleString()}</p>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="font-medium text-gray-500 mb-2">Order Items</h3>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Item</TableHead>
-                      <TableHead>Quantity</TableHead>
-                      <TableHead>Price per Unit</TableHead>
-                      <TableHead>Total</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {selectedOrder.items?.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell>{item.item_name}</TableCell>
-                        <TableCell>{item.quantity}</TableCell>
-                        <TableCell>₹{item.price_per_unit}</TableCell>
-                        <TableCell>₹{item.total_price}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-              <div className="flex justify-end">
-                <p className="text-lg font-semibold">
-                  Total Amount: ₹{selectedOrder.total_amount}
-                </p>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Order</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete order #{selectedOrder?.id}? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>
-              Cancel
-            </Button>
-            <Button 
-              variant="destructive" 
-              onClick={() => handleDeleteOrder(selectedOrder?.id)}
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Order Dialog */}
-      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Order #{editingOrder?.id}</DialogTitle>
-            <DialogDescription>
-              Update order details
-            </DialogDescription>
-          </DialogHeader>
-          
-          {editingOrder && (
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              const formData = new FormData(e.target);
-              handleUpdateOrder(editingOrder.id, {
-                user_name: formData.get('user_name'),
-                phone_number: formData.get('phone_number'),
-                status: formData.get('status')
-              });
-            }}>
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="user_name">Customer Name</Label>
-                  <Input
-                    id="user_name"
-                    name="user_name"
-                    defaultValue={editingOrder.user_name}
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="phone_number">Phone Number</Label>
-                  <Input
-                    id="phone_number"
-                    name="phone_number"
-                    defaultValue={editingOrder.phone_number}
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="status">Status</Label>
-                  <Select name="status" defaultValue={editingOrder.status}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pending">Pending</SelectItem>
-                      <SelectItem value="confirmed">Confirmed</SelectItem>
-                      <SelectItem value="completed">Completed</SelectItem>
-                      <SelectItem value="cancelled">Cancelled</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <DialogFooter className="mt-6">
-                <Button variant="outline" type="button" onClick={() => setShowEditDialog(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit">
-                  Save Changes
-                </Button>
-              </DialogFooter>
-            </form>
-          )}
-        </DialogContent>
-      </Dialog>
     </Layout>
   );
 };
 
-export default Orders; 
+export default Orders;

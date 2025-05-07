@@ -90,9 +90,66 @@ async function updateOrderStatus(orderId, status) {
   return result.affectedRows > 0;
 }
 
+async function deleteOrder(orderId) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    // Delete order items first (due to foreign key constraint)
+    const deleteItemsSql = `DELETE FROM order_items WHERE order_id = ?`;
+    await connection.execute(deleteItemsSql, [orderId]);
+
+    // Delete the order
+    const deleteOrderSql = `DELETE FROM orders WHERE id = ?`;
+    const [result] = await connection.execute(deleteOrderSql, [orderId]);
+
+    await connection.commit();
+    return result.affectedRows > 0;
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+async function updateOrder(orderId, { user_name, phone_number, total_amount }) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    // Update user information
+    const updateUserSql = `
+      UPDATE users u
+      JOIN orders o ON u.id = o.user_id
+      SET u.name = ?, u.phone_number = ?
+      WHERE o.id = ?
+    `;
+    await connection.execute(updateUserSql, [user_name, phone_number, orderId]);
+
+    // Update order total amount
+    const updateOrderSql = `
+      UPDATE orders
+      SET total_amount = ?
+      WHERE id = ?
+    `;
+    const [result] = await connection.execute(updateOrderSql, [total_amount, orderId]);
+
+    await connection.commit();
+    return result.affectedRows > 0;
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
 module.exports = {
   createOrder,
   getOrderById,
   getAllOrders,
-  updateOrderStatus
+  updateOrderStatus,
+  deleteOrder,
+  updateOrder
 }; 

@@ -13,8 +13,8 @@ const app = express();
 
 // CORS configuration
 const corsOptions = {
-  origin: ['http://82.29.164.109:3000', 'http://82.29.164.109:4000', 'http://localhost:5173', 'http://localhost:3000'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  origin: ['http://82.29.164.109:3000', 'http://82.29.164.109:4000', 'http://localhost:5173', 'http://localhost:4000', 'http://localhost:3000'],
+  methods: ['GET', 'POST', 'PUT','PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Referer', 'User-Agent'],
   exposedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,

@@ -11,5 +11,7 @@ router.get('/:orderId', authMiddleware.authenticate, orderCtrl.getOrder);
 // Admin routes
 router.get('/', authMiddleware.authenticate, authMiddleware.requireAdmin, orderCtrl.getAllOrders);
 router.patch('/:orderId/status', authMiddleware.authenticate, authMiddleware.requireAdmin, orderCtrl.updateOrderStatus);
+router.delete('/:orderId', authMiddleware.authenticate, authMiddleware.requireAdmin, orderCtrl.deleteOrder);
+router.put('/:orderId', authMiddleware.authenticate, authMiddleware.requireAdmin, orderCtrl.updateOrder);
 
 module.exports = router; 

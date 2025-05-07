@@ -90,9 +90,66 @@ async function updateOrderStatus(req, res) {
   }
 }
 
+async function deleteOrder(req, res) {
+  try {
+    const { orderId } = req.params;
+    const order = await orderModel.getOrderById(orderId);
+    
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    if (order.status !== 'pending') {
+      return res.status(400).json({ error: 'Only pending orders can be deleted' });
+    }
+
+    const success = await orderModel.deleteOrder(orderId);
+    if (!success) {
+      return res.status(404).json({ error: 'Order not found or not deleted' });
+    }
+
+    return res.json({ message: 'Order deleted successfully' });
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+}
+
+async function updateOrder(req, res) {
+  try {
+    const { orderId } = req.params;
+    const { user_name, phone_number, total_amount } = req.body;
+
+    const order = await orderModel.getOrderById(orderId);
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    if (order.status !== 'pending') {
+      return res.status(400).json({ error: 'Only pending orders can be updated' });
+    }
+
+    const success = await orderModel.updateOrder(orderId, {
+      user_name,
+      phone_number,
+      total_amount
+    });
+
+    if (!success) {
+      return res.status(404).json({ error: 'Order not found or not updated' });
+    }
+
+    const updatedOrder = await orderModel.getOrderById(orderId);
+    return res.json(updatedOrder);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+}
+
 module.exports = {
   createOrder,
   getOrder,
   getAllOrders,
-  updateOrderStatus
+  updateOrderStatus,
+  deleteOrder,
+  updateOrder
 }; 
