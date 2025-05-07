@@ -7,6 +7,7 @@ const authRoutes = require('./routes/auth.routes');
 const adminRoutes = require('./routes/admin.routes');
 const itemRoutes = require('./routes/item.routes');
 const inventoryRoutes = require('./routes/inventory.routes');
+const orderRoutes = require('./routes/order.routes');
 
 const app = express();
 
@@ -49,6 +50,9 @@ app.use('/items', itemRoutes);
 
 // Inventory routes
 app.use('/inventory', inventoryRoutes);
+
+// Order routes
+app.use('/orders', orderRoutes);
 
 // 404 handler
 app.use((req, res) => {
