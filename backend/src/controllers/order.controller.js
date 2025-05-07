@@ -3,7 +3,12 @@ const itemModel = require('../models/item.model');
 
 async function createOrder(req, res) {
   try {
-    const { userId, items } = req.body;
+    const { items } = req.body;
+    const userId = req.user.userId; // Get userId from JWT token
+
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
 
     // Calculate total amount and validate items
     let totalAmount = 0;
