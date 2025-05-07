@@ -61,8 +61,8 @@ const InventoryHistory = () => {
       const offset = (page - 1) * limit;
       
       const url = id 
-        ? `http://localhost:4000/inventory/${id}/history?limit=${limit}&offset=${offset}`
-        : `http://localhost:4000/inventory/history?limit=${limit}&offset=${offset}`;
+        ? `${API_URL}/inventory/${id}/history?limit=${limit}&offset=${offset}`
+        : `${API_URL}/inventory/history?limit=${limit}&offset=${offset}`;
       
       const response = await fetch(url, {
         headers: {
