@@ -1,9 +1,86 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
+import { Line, Bar, Doughnut } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  ArcElement,
+  Title,
+  Tooltip,
+  Legend,
+} from 'chart.js';
+
+// Register ChartJS components
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  ArcElement,
+  Title,
+  Tooltip,
+  Legend
+);
 
 const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
+  const [stats, setStats] = useState({
+    totalOrders: 0,
+    totalRevenue: 0,
+    totalItems: 0,
+    lowStockItems: 0,
+  });
+
+  // Sample data for charts
+  const salesData = {
+    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+    datasets: [
+      {
+        label: 'Sales',
+        data: [65, 59, 80, 81, 56, 55],
+        fill: false,
+        borderColor: 'rgb(220, 38, 38)',
+        tension: 0.1,
+      },
+    ],
+  };
+
+  const topProductsData = {
+    labels: ['Red Chilli', 'Turmeric', 'Coriander', 'Garam Masala', 'Black Pepper'],
+    datasets: [
+      {
+        label: 'Units Sold',
+        data: [120, 90, 85, 75, 60],
+        backgroundColor: [
+          'rgba(220, 38, 38, 0.8)',
+          'rgba(239, 68, 68, 0.8)',
+          'rgba(248, 113, 113, 0.8)',
+          'rgba(252, 165, 165, 0.8)',
+          'rgba(254, 202, 202, 0.8)',
+        ],
+      },
+    ],
+  };
+
+  const orderStatusData = {
+    labels: ['Completed', 'Pending', 'Cancelled'],
+    datasets: [
+      {
+        data: [70, 20, 10],
+        backgroundColor: [
+          'rgba(34, 197, 94, 0.8)',
+          'rgba(234, 179, 8, 0.8)',
+          'rgba(239, 68, 68, 0.8)',
+        ],
+      },
+    ],
+  };
 
   return (
     <Layout>
@@ -67,31 +144,150 @@ const Dashboard = () => {
         <div className="px-4 py-6 sm:px-0">
           {/* Overview Tab */}
           {activeTab === 'overview' && (
-            <div className="bg-white shadow-lg rounded-lg overflow-hidden">
-              <div className="bg-red-600 px-6 py-4">
-                <h2 className="text-xl font-bold text-white">Dashboard Overview</h2>
-              </div>
-              <div className="p-6">
-                <div className="flex items-center justify-center h-64">
-                  <div className="text-center">
-                    <div className="flex justify-center mb-4">
-                      <div className="p-3 rounded-full bg-red-100 text-red-600">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <>
+              {/* Stats Cards */}
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+                <div className="bg-white overflow-hidden shadow rounded-lg">
+                  <div className="px-4 py-5 sm:p-6">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0 bg-red-100 rounded-md p-3">
+                        <svg className="h-6 w-6 text-red-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                         </svg>
                       </div>
+                      <div className="ml-5 w-0 flex-1">
+                        <dl>
+                          <dt className="text-sm font-medium text-gray-500 truncate">Total Orders</dt>
+                          <dd className="flex items-baseline">
+                            <div className="text-2xl font-semibold text-gray-900">{stats.totalOrders}</div>
+                          </dd>
+                        </dl>
+                      </div>
                     </div>
-                    <h2 className="text-2xl font-bold text-gray-800">Welcome to Sorath Masala Dashboard</h2>
-                    <p className="mt-4 text-md text-gray-600">
-                      Use the sidebar to navigate through different sections of the admin panel.
-                    </p>
-                    <p className="mt-2 text-sm text-gray-500">
-                      This is your central command center for managing inventory, orders, and business operations.
-                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-white overflow-hidden shadow rounded-lg">
+                  <div className="px-4 py-5 sm:p-6">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0 bg-green-100 rounded-md p-3">
+                        <svg className="h-6 w-6 text-green-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <div className="ml-5 w-0 flex-1">
+                        <dl>
+                          <dt className="text-sm font-medium text-gray-500 truncate">Total Revenue</dt>
+                          <dd className="flex items-baseline">
+                            <div className="text-2xl font-semibold text-gray-900">₹{stats.totalRevenue}</div>
+                          </dd>
+                        </dl>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white overflow-hidden shadow rounded-lg">
+                  <div className="px-4 py-5 sm:p-6">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0 bg-blue-100 rounded-md p-3">
+                        <svg className="h-6 w-6 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                        </svg>
+                      </div>
+                      <div className="ml-5 w-0 flex-1">
+                        <dl>
+                          <dt className="text-sm font-medium text-gray-500 truncate">Total Items</dt>
+                          <dd className="flex items-baseline">
+                            <div className="text-2xl font-semibold text-gray-900">{stats.totalItems}</div>
+                          </dd>
+                        </dl>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white overflow-hidden shadow rounded-lg">
+                  <div className="px-4 py-5 sm:p-6">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0 bg-yellow-100 rounded-md p-3">
+                        <svg className="h-6 w-6 text-yellow-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                      </div>
+                      <div className="ml-5 w-0 flex-1">
+                        <dl>
+                          <dt className="text-sm font-medium text-gray-500 truncate">Low Stock Items</dt>
+                          <dd className="flex items-baseline">
+                            <div className="text-2xl font-semibold text-gray-900">{stats.lowStockItems}</div>
+                          </dd>
+                        </dl>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+
+              {/* Charts */}
+              <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 mb-6">
+                <div className="bg-white shadow rounded-lg p-6">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Sales Trend</h3>
+                  <div className="h-80">
+                    <Line data={salesData} options={{ maintainAspectRatio: false }} />
+                  </div>
+                </div>
+
+                <div className="bg-white shadow rounded-lg p-6">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Top Products</h3>
+                  <div className="h-80">
+                    <Bar data={topProductsData} options={{ maintainAspectRatio: false }} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                <div className="bg-white shadow rounded-lg p-6">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Order Status</h3>
+                  <div className="h-80 flex items-center justify-center">
+                    <div className="w-64 h-64">
+                      <Doughnut data={orderStatusData} options={{ maintainAspectRatio: false }} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white shadow rounded-lg p-6">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Recent Activity</h3>
+                  <div className="space-y-4">
+                    <div className="flex items-center space-x-4">
+                      <div className="flex-shrink-0">
+                        <div className="h-8 w-8 rounded-full bg-red-100 flex items-center justify-center">
+                          <svg className="h-5 w-5 text-red-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                          </svg>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">New order received</p>
+                        <p className="text-sm text-gray-500">Order #1234 from Dealer XYZ</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-4">
+                      <div className="flex-shrink-0">
+                        <div className="h-8 w-8 rounded-full bg-yellow-100 flex items-center justify-center">
+                          <svg className="h-5 w-5 text-yellow-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">Low stock alert</p>
+                        <p className="text-sm text-gray-500">Red Chilli powder is running low</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
           )}
 
           {/* Item Management Tab */}
@@ -164,100 +360,6 @@ const Dashboard = () => {
                 <p className="text-gray-500 mb-4">
                   This feature is coming soon. You'll be able to view sales reports and analytics here.
                 </p>
-              </div>
-            </div>
-          )}
-          
-          {activeTab === 'overview' && (
-            <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              <div className="bg-white overflow-hidden shadow rounded-lg">
-                <div className="px-4 py-5 sm:p-6">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0 bg-red-100 rounded-md p-3">
-                      <svg className="h-6 w-6 text-red-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-                      </svg>
-                    </div>
-                    <div className="ml-5 w-0 flex-1">
-                      <dl>
-                        <dt className="text-sm font-medium text-gray-500 truncate">Inventory Management</dt>
-                        <dd className="flex items-baseline">
-                          <div className="text-2xl font-semibold text-gray-900">Available</div>
-                        </dd>
-                      </dl>
-                    </div>
-                  </div>
-                </div>
-                <div className="bg-gray-50 px-4 py-4 sm:px-6">
-                  <div className="text-sm">
-                    <button 
-                      onClick={() => setActiveTab('inventory')}
-                      className="font-medium text-red-600 hover:text-red-500"
-                    >
-                      View inventory
-                    </button>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="bg-white overflow-hidden shadow rounded-lg">
-                <div className="px-4 py-5 sm:p-6">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0 bg-red-100 rounded-md p-3">
-                      <svg className="h-6 w-6 text-red-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                      </svg>
-                    </div>
-                    <div className="ml-5 w-0 flex-1">
-                      <dl>
-                        <dt className="text-sm font-medium text-gray-500 truncate">Order Management</dt>
-                        <dd className="flex items-baseline">
-                          <div className="text-2xl font-semibold text-gray-900">Coming Soon</div>
-                        </dd>
-                      </dl>
-                    </div>
-                  </div>
-                </div>
-                <div className="bg-gray-50 px-4 py-4 sm:px-6">
-                  <div className="text-sm">
-                    <button 
-                      className="font-medium text-red-600 hover:text-red-500"
-                      disabled
-                    >
-                      Not available yet
-                    </button>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="bg-white overflow-hidden shadow rounded-lg">
-                <div className="px-4 py-5 sm:p-6">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0 bg-red-100 rounded-md p-3">
-                      <svg className="h-6 w-6 text-red-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                      </svg>
-                    </div>
-                    <div className="ml-5 w-0 flex-1">
-                      <dl>
-                        <dt className="text-sm font-medium text-gray-500 truncate">Sales Analytics</dt>
-                        <dd className="flex items-baseline">
-                          <div className="text-2xl font-semibold text-gray-900">Coming Soon</div>
-                        </dd>
-                      </dl>
-                    </div>
-                  </div>
-                </div>
-                <div className="bg-gray-50 px-4 py-4 sm:px-6">
-                  <div className="text-sm">
-                    <button 
-                      className="font-medium text-red-600 hover:text-red-500"
-                      disabled
-                    >
-                      Not available yet
-                    </button>
-                  </div>
-                </div>
               </div>
             </div>
           )}
