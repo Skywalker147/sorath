@@ -1,176 +1,154 @@
-CREATE TABLE
-IF NOT EXISTS admins
-(
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  username VARCHAR
-(50) NOT NULL UNIQUE,
-  password VARCHAR
-(255) NOT NULL,
-  name VARCHAR
-(100) NOT NULL,
-  role VARCHAR
-(20) NOT NULL DEFAULT 'admin',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON
-UPDATE CURRENT_TIMESTAMP
+-- Database Schema for MERN Project
+
+-- Create database
+CREATE DATABASE IF NOT EXISTS inventory_management;
+USE inventory_management;
+
+-- Owner/Admin table
+CREATE TABLE owners (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
-
--- Create items table
-CREATE TABLE
-IF NOT EXISTS items
-(
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  name VARCHAR
-(100) NOT NULL,
-  description TEXT,
-  price_per_gatha DECIMAL
-(10,2) NOT NULL,
-  packs_per_gatha INT NOT NULL DEFAULT 30,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON
-UPDATE CURRENT_TIMESTAMP
+-- Warehouse table
+CREATE TABLE warehouses (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(100) NOT NULL,
+    address TEXT NOT NULL,
+    pincode VARCHAR(10) NOT NULL,
+    status ENUM('active', 'inactive') DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
--- Create inventory table
-CREATE TABLE
-IF NOT EXISTS inventory
-(
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  item_id INT NOT NULL,
-  quantity INT NOT NULL DEFAULT 0,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON
-UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY
-(item_id) REFERENCES items
-(id)
+-- Items table
+CREATE TABLE items (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(100) NOT NULL,
+    price DECIMAL(10, 2) NOT NULL,
+    status ENUM('active', 'inactive') DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
--- Create inventory history table
-CREATE TABLE
-IF NOT EXISTS inventory_history
-(
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  item_id INT NOT NULL,
-  quantity_change INT NOT NULL,
-  reason VARCHAR
-(255) NOT NULL,
-  admin_id INT NOT NULL,
-  timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY
-(item_id) REFERENCES items
-(id),
-  FOREIGN KEY
-(admin_id) REFERENCES admins
-(id)
+-- Registration codes table (for 24h temporary codes)
+CREATE TABLE registration_codes (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    code VARCHAR(8) UNIQUE NOT NULL,
+    role ENUM('warehouse', 'salesman', 'dealer') NOT NULL,
+    warehouse_id INT,
+    expires_at TIMESTAMP NOT NULL,
+    is_used BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (warehouse_id) REFERENCES warehouses(id) ON DELETE SET NULL
 );
 
--- Create users table if not exists (for OTP authentication)
-CREATE TABLE
-IF NOT EXISTS users
-(
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  name VARCHAR
-(100) NOT NULL,
-  phone_number VARCHAR
-(15) NOT NULL UNIQUE,
-  location VARCHAR
-(255),
-  role ENUM
-('dealer', 'salesman') NOT NULL,
-  is_verified BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- Dealers table
+CREATE TABLE dealers (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(100) NOT NULL,
+    agency_name VARCHAR(100) NOT NULL,
+    address TEXT NOT NULL,
+    pincode VARCHAR(10) NOT NULL,
+    mobile_number VARCHAR(15) UNIQUE NOT NULL,
+    warehouse_id INT,
+    status ENUM('active', 'inactive') DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (warehouse_id) REFERENCES warehouses(id) ON DELETE SET NULL
 );
 
--- Create OTPs table if not exists
-CREATE TABLE
-IF NOT EXISTS otps
-(
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  phone_number VARCHAR
-(15) NOT NULL,
-  code VARCHAR
-(6) NOT NULL,
-  expires_at DATETIME NOT NULL,
-  used BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- Salesman table
+CREATE TABLE salesmen (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(100) NOT NULL,
+    aadhar_number VARCHAR(12) UNIQUE NOT NULL,
+    pan_number VARCHAR(10) UNIQUE NOT NULL,
+    mobile_number VARCHAR(15) UNIQUE NOT NULL,
+    warehouse_id INT,
+    status ENUM('active', 'inactive') DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (warehouse_id) REFERENCES warehouses(id) ON DELETE SET NULL
 );
 
--- Create orders table
-CREATE TABLE
-IF NOT EXISTS orders
-(
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  user_id INT NOT NULL,
-  total_amount DECIMAL
-(10,2) NOT NULL,
-  status ENUM
-('pending', 'confirmed', 'completed', 'cancelled') DEFAULT 'pending',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON
-UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY
-(user_id) REFERENCES users
-(id)
+-- Inventory table (warehouse stock)
+CREATE TABLE inventory (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    warehouse_id INT NOT NULL,
+    item_id INT NOT NULL,
+    quantity INT NOT NULL DEFAULT 0,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (warehouse_id) REFERENCES warehouses(id) ON DELETE CASCADE,
+    FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE,
+    UNIQUE KEY unique_warehouse_item (warehouse_id, item_id)
 );
 
--- Create order_items table
-CREATE TABLE
-IF NOT EXISTS order_items
-(
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  order_id INT NOT NULL,
-  item_id INT NOT NULL,
-  quantity INT NOT NULL,
-  price_per_unit DECIMAL
-(10,2) NOT NULL,
-  total_price DECIMAL
-(10,2) NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY
-(order_id) REFERENCES orders
-(id),
-  FOREIGN KEY
-(item_id) REFERENCES items
-(id)
+-- Orders table
+CREATE TABLE orders (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    order_number VARCHAR(20) UNIQUE NOT NULL,
+    warehouse_id INT NOT NULL,
+    dealer_id INT,
+    salesman_id INT,
+    total_amount DECIMAL(12, 2) NOT NULL,
+    transport_status ENUM('pending', 'dispatched', 'delivered', 'cancelled') DEFAULT 'pending',
+    payment_status ENUM('pending', 'partial', 'paid') DEFAULT 'pending',
+    order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    dispatch_date TIMESTAMP NULL,
+    delivery_date TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (warehouse_id) REFERENCES warehouses(id) ON DELETE CASCADE,
+    FOREIGN KEY (dealer_id) REFERENCES dealers(id) ON DELETE SET NULL,
+    FOREIGN KEY (salesman_id) REFERENCES salesmen(id) ON DELETE SET NULL
 );
 
-
--- Create orders table
-CREATE TABLE
-IF NOT EXISTS orders
-(
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  user_id INT NOT NULL,
-  total_amount DECIMAL
-(10,2) NOT NULL,
-  status ENUM
-('pending', 'confirmed', 'completed', 'cancelled') DEFAULT 'pending',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON
-UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY
-(user_id) REFERENCES users
-(id)
+-- Order items table
+CREATE TABLE order_items (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    order_id INT NOT NULL,
+    item_id INT NOT NULL,
+    quantity INT NOT NULL,
+    price_per_item DECIMAL(10, 2) NOT NULL,
+    total_price DECIMAL(12, 2) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+    FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
 );
 
--- Create order_items table
-CREATE TABLE
-IF NOT EXISTS order_items
-(
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  order_id INT NOT NULL,
-  item_id INT NOT NULL,
-  quantity INT NOT NULL,
-  price_per_unit DECIMAL
-(10,2) NOT NULL,
-  total_price DECIMAL
-(10,2) NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY
-(order_id) REFERENCES orders
-(id),
-  FOREIGN KEY
-(item_id) REFERENCES items
-(id)
+-- Return orders table
+CREATE TABLE return_orders (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    return_number VARCHAR(20) UNIQUE NOT NULL,
+    original_order_id INT,
+    warehouse_id INT NOT NULL,
+    dealer_id INT,
+    salesman_id INT,
+    item_id INT NOT NULL,
+    quantity INT NOT NULL,
+    reason TEXT,
+    return_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (original_order_id) REFERENCES orders(id) ON DELETE SET NULL,
+    FOREIGN KEY (warehouse_id) REFERENCES warehouses(id) ON DELETE CASCADE,
+    FOREIGN KEY (dealer_id) REFERENCES dealers(id) ON DELETE SET NULL,
+    FOREIGN KEY (salesman_id) REFERENCES salesmen(id) ON DELETE SET NULL,
+    FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
 );
+
+-- Insert default owner
+INSERT INTO owners (username, password) VALUES 
+('admin', '$2b$10$rQZ1vQZ1vQZ1vQZ1vQZ1vO7K8K8K8K8K8K8K8K8K8K8K8K8K8');
+
+-- Create indexes for better performance
+CREATE INDEX idx_orders_warehouse ON orders(warehouse_id);
+CREATE INDEX idx_orders_dealer ON orders(dealer_id);
+CREATE INDEX idx_orders_salesman ON orders(salesman_id);
+CREATE INDEX idx_orders_date ON orders(order_date);
+CREATE INDEX idx_registration_codes_expires ON registration_codes(expires_at);
+CREATE INDEX idx_inventory_warehouse_item ON inventory(warehouse_id, item_id);

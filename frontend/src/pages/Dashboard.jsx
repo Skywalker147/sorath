@@ -1,371 +1,458 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import Layout from '../components/Layout';
-import { Line, Bar, Doughnut } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  ArcElement,
-  Title,
-  Tooltip,
-  Legend,
-} from 'chart.js';
-
-// Register ChartJS components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  ArcElement,
-  Title,
-  Tooltip,
-  Legend
-);
+import React, { useState, useEffect, useContext } from 'react';
+import { 
+  TrendingUp, 
+  TrendingDown,
+  Users, 
+  Package, 
+  ShoppingCart, 
+  DollarSign,
+  Warehouse,
+  RotateCcw,
+  AlertTriangle,
+  CheckCircle,
+  Clock,
+  Eye,
+  ArrowRight,
+  BarChart3,
+  PieChart,
+  Activity,
+  Calendar,
+  MapPin,
+  Package2
+} from 'lucide-react';
+import { AuthContext } from '../App';
+import { API_URL } from '../config';
+import { currencyUtils, dateUtils } from '../lib/utils';
 
 const Dashboard = () => {
-  const [activeTab, setActiveTab] = useState('overview');
-  const [stats, setStats] = useState({
-    totalOrders: 0,
-    totalRevenue: 0,
-    totalItems: 0,
-    lowStockItems: 0,
-  });
+  const { role, user } = useContext(AuthContext);
+  const [stats, setStats] = useState({});
+  const [recentOrders, setRecentOrders] = useState([]);
+  const [recentReturns, setRecentReturns] = useState([]);
+  const [lowStockItems, setLowStockItems] = useState([]);
+  const [monthlySales, setMonthlySales] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // Sample data for charts
-  const salesData = {
-    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
-    datasets: [
-      {
-        label: 'Sales',
-        data: [65, 59, 80, 81, 56, 55],
-        fill: false,
-        borderColor: 'rgb(220, 38, 38)',
-        tension: 0.1,
-      },
-    ],
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('adminToken');
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+
+      // Determine warehouse filter based on role
+      const warehouseParam = role === 'warehouse' ? `?warehouseId=${user?.id}` : '';
+
+      const [
+        userStatsRes,
+        itemStatsRes,
+        inventoryStatsRes,
+        orderStatsRes,
+        returnStatsRes,
+        recentOrdersRes,
+        recentReturnsRes,
+        lowStockRes,
+        monthlySalesRes
+      ] = await Promise.all([
+        role === 'owner' ? fetch(`${API_URL}/users/stats`, { headers }) : null,
+        fetch(`${API_URL}/items/stats`, { headers }),
+        fetch(`${API_URL}/inventory/stats${warehouseParam}`, { headers }),
+        fetch(`${API_URL}/orders/stats${warehouseParam}`, { headers }),
+        fetch(`${API_URL}/returns/stats${warehouseParam}`, { headers }),
+        fetch(`${API_URL}/orders/pending${warehouseParam}&limit=5`, { headers }),
+        fetch(`${API_URL}/returns/pending${warehouseParam}&limit=5`, { headers }),
+        fetch(`${API_URL}/inventory/low-stock${warehouseParam}&threshold=10&limit=5`, { headers }),
+        fetch(`${API_URL}/orders/monthly-sales${warehouseParam}`, { headers })
+      ]);
+
+      const [
+        userStatsData,
+        itemStatsData,
+        inventoryStatsData,
+        orderStatsData,
+        returnStatsData,
+        recentOrdersData,
+        recentReturnsData,
+        lowStockData,
+        monthlySalesData
+      ] = await Promise.all([
+        userStatsRes ? userStatsRes.json() : { data: {} },
+        itemStatsRes.json(),
+        inventoryStatsRes.json(),
+        orderStatsRes.json(),
+        returnStatsRes.json(),
+        recentOrdersRes.json(),
+        recentReturnsRes.json(),
+        lowStockRes.json(),
+        monthlySalesRes.json()
+      ]);
+
+      setStats({
+        users: userStatsData.data || {},
+        items: itemStatsData.data || {},
+        inventory: inventoryStatsData.data || {},
+        orders: orderStatsData.data || {},
+        returns: returnStatsData.data || {}
+      });
+
+      setRecentOrders(recentOrdersData.data || []);
+      setRecentReturns(recentReturnsData.data || []);
+      setLowStockItems(lowStockData.data || []);
+      setMonthlySales(monthlySalesData.data || []);
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const topProductsData = {
-    labels: ['Red Chilli', 'Turmeric', 'Coriander', 'Garam Masala', 'Black Pepper'],
-    datasets: [
-      {
-        label: 'Units Sold',
-        data: [120, 90, 85, 75, 60],
-        backgroundColor: [
-          'rgba(220, 38, 38, 0.8)',
-          'rgba(239, 68, 68, 0.8)',
-          'rgba(248, 113, 113, 0.8)',
-          'rgba(252, 165, 165, 0.8)',
-          'rgba(254, 202, 202, 0.8)',
-        ],
-      },
-    ],
+  const getMonthName = (monthNumber) => {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return months[monthNumber - 1];
   };
 
-  const orderStatusData = {
-    labels: ['Completed', 'Pending', 'Cancelled'],
-    datasets: [
-      {
-        data: [70, 20, 10],
-        backgroundColor: [
-          'rgba(34, 197, 94, 0.8)',
-          'rgba(234, 179, 8, 0.8)',
-          'rgba(239, 68, 68, 0.8)',
-        ],
-      },
-    ],
+  const calculateGrowth = () => {
+    if (monthlySales.length < 2) return 0;
+    const currentMonth = monthlySales[monthlySales.length - 1];
+    const previousMonth = monthlySales[monthlySales.length - 2];
+    
+    if (previousMonth.revenue === 0) return currentMonth.revenue > 0 ? 100 : 0;
+    return ((currentMonth.revenue - previousMonth.revenue) / previousMonth.revenue * 100).toFixed(1);
   };
 
-  return (
-    <Layout>
-      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        {/* Navigation Tabs */}
-        <div className="border-b border-gray-200 mb-6">
-          <nav className="-mb-px flex space-x-8">
-            <button
-              onClick={() => setActiveTab('overview')}
-              className={`${
-                activeTab === 'overview'
-                  ? 'border-red-500 text-red-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-            >
-              Overview
-            </button>
-            <button
-              onClick={() => setActiveTab('items')}
-              className={`${
-                activeTab === 'items'
-                  ? 'border-red-500 text-red-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-            >
-              Item Management
-            </button>
-            <button
-              onClick={() => setActiveTab('inventory')}
-              className={`${
-                activeTab === 'inventory'
-                  ? 'border-red-500 text-red-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-            >
-              Inventory
-            </button>
-            <button
-              onClick={() => setActiveTab('orders')}
-              className={`${
-                activeTab === 'orders'
-                  ? 'border-red-500 text-red-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-            >
-              Orders
-            </button>
-            <button
-              onClick={() => setActiveTab('reports')}
-              className={`${
-                activeTab === 'reports'
-                  ? 'border-red-500 text-red-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-            >
-              Reports
-            </button>
-          </nav>
+  const StatCard = ({ title, value, subtext, icon: Icon, color, trend, trendValue }) => (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-gray-600">{title}</p>
+          <p className="text-2xl font-bold text-gray-900">{value}</p>
+          {subtext && (
+            <p className="text-sm text-gray-500 mt-1">{subtext}</p>
+          )}
+          {trend && (
+            <div className={`flex items-center mt-2 text-sm ${trend === 'up' ? 'text-green-600' : 'text-red-600'}`}>
+              {trend === 'up' ? <TrendingUp className="h-4 w-4 mr-1" /> : <TrendingDown className="h-4 w-4 mr-1" />}
+              <span>{trendValue}% from last month</span>
+            </div>
+          )}
         </div>
-
-        <div className="px-4 py-6 sm:px-0">
-          {/* Overview Tab */}
-          {activeTab === 'overview' && (
-            <>
-              {/* Stats Cards */}
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-6">
-                <div className="bg-white overflow-hidden shadow rounded-lg">
-                  <div className="px-4 py-5 sm:p-6">
-                    <div className="flex items-center">
-                      <div className="flex-shrink-0 bg-red-100 rounded-md p-3">
-                        <svg className="h-6 w-6 text-red-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-                        </svg>
-                      </div>
-                      <div className="ml-5 w-0 flex-1">
-                        <dl>
-                          <dt className="text-sm font-medium text-gray-500 truncate">Total Orders</dt>
-                          <dd className="flex items-baseline">
-                            <div className="text-2xl font-semibold text-gray-900">{stats.totalOrders}</div>
-                          </dd>
-                        </dl>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white overflow-hidden shadow rounded-lg">
-                  <div className="px-4 py-5 sm:p-6">
-                    <div className="flex items-center">
-                      <div className="flex-shrink-0 bg-green-100 rounded-md p-3">
-                        <svg className="h-6 w-6 text-green-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </div>
-                      <div className="ml-5 w-0 flex-1">
-                        <dl>
-                          <dt className="text-sm font-medium text-gray-500 truncate">Total Revenue</dt>
-                          <dd className="flex items-baseline">
-                            <div className="text-2xl font-semibold text-gray-900">₹{stats.totalRevenue}</div>
-                          </dd>
-                        </dl>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white overflow-hidden shadow rounded-lg">
-                  <div className="px-4 py-5 sm:p-6">
-                    <div className="flex items-center">
-                      <div className="flex-shrink-0 bg-blue-100 rounded-md p-3">
-                        <svg className="h-6 w-6 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                        </svg>
-                      </div>
-                      <div className="ml-5 w-0 flex-1">
-                        <dl>
-                          <dt className="text-sm font-medium text-gray-500 truncate">Total Items</dt>
-                          <dd className="flex items-baseline">
-                            <div className="text-2xl font-semibold text-gray-900">{stats.totalItems}</div>
-                          </dd>
-                        </dl>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white overflow-hidden shadow rounded-lg">
-                  <div className="px-4 py-5 sm:p-6">
-                    <div className="flex items-center">
-                      <div className="flex-shrink-0 bg-yellow-100 rounded-md p-3">
-                        <svg className="h-6 w-6 text-yellow-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
-                      </div>
-                      <div className="ml-5 w-0 flex-1">
-                        <dl>
-                          <dt className="text-sm font-medium text-gray-500 truncate">Low Stock Items</dt>
-                          <dd className="flex items-baseline">
-                            <div className="text-2xl font-semibold text-gray-900">{stats.lowStockItems}</div>
-                          </dd>
-                        </dl>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Charts */}
-              <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 mb-6">
-                <div className="bg-white shadow rounded-lg p-6">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Sales Trend</h3>
-                  <div className="h-80">
-                    <Line data={salesData} options={{ maintainAspectRatio: false }} />
-                  </div>
-                </div>
-
-                <div className="bg-white shadow rounded-lg p-6">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Top Products</h3>
-                  <div className="h-80">
-                    <Bar data={topProductsData} options={{ maintainAspectRatio: false }} />
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-                <div className="bg-white shadow rounded-lg p-6">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Order Status</h3>
-                  <div className="h-80 flex items-center justify-center">
-                    <div className="w-64 h-64">
-                      <Doughnut data={orderStatusData} options={{ maintainAspectRatio: false }} />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white shadow rounded-lg p-6">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Recent Activity</h3>
-                  <div className="space-y-4">
-                    <div className="flex items-center space-x-4">
-                      <div className="flex-shrink-0">
-                        <div className="h-8 w-8 rounded-full bg-red-100 flex items-center justify-center">
-                          <svg className="h-5 w-5 text-red-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-                          </svg>
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">New order received</p>
-                        <p className="text-sm text-gray-500">Order #1234 from Dealer XYZ</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-4">
-                      <div className="flex-shrink-0">
-                        <div className="h-8 w-8 rounded-full bg-yellow-100 flex items-center justify-center">
-                          <svg className="h-5 w-5 text-yellow-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                          </svg>
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">Low stock alert</p>
-                        <p className="text-sm text-gray-500">Red Chilli powder is running low</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* Item Management Tab */}
-          {activeTab === 'items' && (
-            <div className="bg-white shadow-lg rounded-lg overflow-hidden">
-              <div className="bg-red-600 px-6 py-4 flex justify-between items-center">
-                <h2 className="text-xl font-bold text-white">Item Management</h2>
-                <Link 
-                  to="/items/new"
-                  className="bg-white text-red-600 px-4 py-2 rounded-md text-sm font-medium hover:bg-red-50"
-                >
-                  Add New Item
-                </Link>
-              </div>
-              <div className="p-6">
-                <p className="text-gray-500 mb-4">
-                  Manage your masala items and pricing here. You can add, edit, and remove items from your catalog.
-                </p>
-                <Link
-                  to="/items"
-                  className="inline-flex items-center px-4 py-2 border border-red-600 text-red-600 rounded-md hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                >
-                  Go to Item Management
-                </Link>
-              </div>
-            </div>
-          )}
-
-          {/* Inventory Tab */}
-          {activeTab === 'inventory' && (
-            <div className="bg-white shadow-lg rounded-lg overflow-hidden">
-              <div className="bg-red-600 px-6 py-4">
-                <h2 className="text-xl font-bold text-white">Inventory Management</h2>
-              </div>
-              <div className="p-6">
-                <p className="text-gray-500 mb-4">
-                  Track and manage your inventory levels. Update stock quantities and view inventory history.
-                </p>
-                <Link
-                  to="/inventory"
-                  className="inline-flex items-center px-4 py-2 border border-red-600 text-red-600 rounded-md hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                >
-                  Go to Inventory Management
-                </Link>
-              </div>
-            </div>
-          )}
-
-          {/* Orders Tab */}
-          {activeTab === 'orders' && (
-            <div className="bg-white shadow-lg rounded-lg overflow-hidden">
-              <div className="bg-red-600 px-6 py-4">
-                <h2 className="text-xl font-bold text-white">Order Management</h2>
-              </div>
-              <div className="p-6">
-                <p className="text-gray-500 mb-4">
-                  This feature is coming soon. You'll be able to manage orders from salesmen and dealers here.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Reports Tab */}
-          {activeTab === 'reports' && (
-            <div className="bg-white shadow-lg rounded-lg overflow-hidden">
-              <div className="bg-red-600 px-6 py-4">
-                <h2 className="text-xl font-bold text-white">Sales Reports</h2>
-              </div>
-              <div className="p-6">
-                <p className="text-gray-500 mb-4">
-                  This feature is coming soon. You'll be able to view sales reports and analytics here.
-                </p>
-              </div>
-            </div>
-          )}
+        <div className={`p-3 rounded-full ${color}`}>
+          <Icon className="h-6 w-6 text-white" />
         </div>
       </div>
-    </Layout>
+    </div>
+  );
+
+  const QuickActionCard = ({ title, description, icon: Icon, color, onClick }) => (
+    <div 
+      className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 cursor-pointer hover:shadow-md transition-shadow"
+      onClick={onClick}
+    >
+      <div className="flex items-center">
+        <div className={`p-2 rounded-lg ${color} mr-3`}>
+          <Icon className="h-5 w-5 text-white" />
+        </div>
+        <div className="flex-1">
+          <h3 className="text-sm font-medium text-gray-900">{title}</h3>
+          <p className="text-xs text-gray-500">{description}</p>
+        </div>
+        <ArrowRight className="h-4 w-4 text-gray-400" />
+      </div>
+    </div>
+  );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600"></div>
+      </div>
+    );
+  }
+
+  const growth = calculateGrowth();
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">
+            {role === 'owner' ? 'Business Dashboard' : 'Warehouse Dashboard'}
+          </h1>
+          <p className="text-gray-600">
+            {role === 'owner' 
+              ? 'Overview of your entire business operations' 
+              : `Warehouse operations overview`
+            }
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-sm text-gray-500">Last updated</p>
+          <p className="text-sm font-medium">{dateUtils.formatDateTime(new Date())}</p>
+        </div>
+      </div>
+
+      {/* Key Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCard
+          title="Total Revenue"
+          value={currencyUtils.format(stats.orders?.total_revenue || 0)}
+          subtext={`From ${stats.orders?.total_orders || 0} orders`}
+          icon={DollarSign}
+          color="bg-green-500"
+          trend={growth > 0 ? 'up' : growth < 0 ? 'down' : null}
+          trendValue={Math.abs(growth)}
+        />
+
+        <StatCard
+          title="Active Orders"
+          value={stats.orders?.pending_orders || 0}
+          subtext={`${stats.orders?.dispatched_orders || 0} dispatched`}
+          icon={ShoppingCart}
+          color="bg-blue-500"
+        />
+
+        <StatCard
+          title="Inventory Items"
+          value={stats.inventory?.total_items || 0}
+          subtext={`Worth ${currencyUtils.format(stats.inventory?.total_value || 0)}`}
+          icon={Package}
+          color="bg-purple-500"
+        />
+
+        <StatCard
+          title="Pending Returns"
+          value={stats.returns?.pending_returns || 0}
+          subtext={`${stats.returns?.total_returns || 0} total returns`}
+          icon={RotateCcw}
+          color="bg-orange-500"
+        />
+      </div>
+
+      {/* Owner-specific Stats */}
+      {role === 'owner' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <StatCard
+            title="Total Warehouses"
+            value={stats.users?.warehouses?.total || 0}
+            subtext={`${stats.users?.warehouses?.active || 0} active`}
+            icon={Warehouse}
+            color="bg-indigo-500"
+          />
+
+          <StatCard
+            title="Active Dealers"
+            value={stats.users?.dealers?.active || 0}
+            subtext={`${stats.users?.dealers?.total || 0} total registered`}
+            icon={Users}
+            color="bg-green-500"
+          />
+
+          <StatCard
+            title="Active Salesmen"
+            value={stats.users?.salesmen?.active || 0}
+            subtext={`${stats.users?.salesmen?.total || 0} total registered`}
+            icon={Users}
+            color="bg-blue-500"
+          />
+        </div>
+      )}
+
+      {/* Charts and Analytics */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Monthly Sales Chart */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-medium text-gray-900">Monthly Sales</h3>
+            <BarChart3 className="h-5 w-5 text-gray-400" />
+          </div>
+          <div className="space-y-3">
+            {monthlySales.slice(-6).map((month) => (
+              <div key={month.month} className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className="w-16 text-sm text-gray-600">
+                    {getMonthName(month.month)}
+                  </div>
+                  <div className="flex-1 mx-3">
+                    <div className="bg-gray-200 rounded-full h-2">
+                      <div 
+                        className="bg-red-500 h-2 rounded-full"
+                        style={{ 
+                          width: `${Math.max(5, (month.revenue / Math.max(...monthlySales.map(m => m.revenue))) * 100)}%` 
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-medium">{currencyUtils.format(month.revenue)}</div>
+                  <div className="text-xs text-gray-500">{month.order_count} orders</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-medium text-gray-900">Quick Actions</h3>
+            <Activity className="h-5 w-5 text-gray-400" />
+          </div>
+          <div className="space-y-3">
+            <QuickActionCard
+              title="Create New Order"
+              description="Add a new customer order"
+              icon={ShoppingCart}
+              color="bg-blue-500"
+              onClick={() => window.location.href = '/orders'}
+            />
+            <QuickActionCard
+              title="Update Inventory"
+              description="Manage stock levels"
+              icon={Package}
+              color="bg-green-500"
+              onClick={() => window.location.href = '/inventory'}
+            />
+            <QuickActionCard
+              title="Process Returns"
+              description="Handle return requests"
+              icon={RotateCcw}
+              color="bg-orange-500"
+              onClick={() => window.location.href = '/returns'}
+            />
+            {role === 'owner' && (
+              <QuickActionCard
+                title="Add New Item"
+                description="Expand product catalog"
+                icon={Package2}
+                color="bg-purple-500"
+                onClick={() => window.location.href = '/items'}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Recent Activity */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Recent Orders */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-medium text-gray-900">Recent Orders</h3>
+            <button 
+              onClick={() => window.location.href = '/orders'}
+              className="text-red-600 hover:text-red-700 text-sm font-medium"
+            >
+              View all
+            </button>
+          </div>
+          <div className="space-y-3">
+            {recentOrders.length > 0 ? recentOrders.map((order) => (
+              <div key={order.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div className="flex items-center">
+                  <div className="p-2 bg-blue-100 rounded-lg mr-3">
+                    <ShoppingCart className="h-4 w-4 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{order.order_number}</p>
+                    <p className="text-xs text-gray-500">
+                      {order.dealer_name || order.salesman_name} • {dateUtils.formatDate(order.order_date)}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-medium">{currencyUtils.format(order.total_amount)}</p>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-yellow-100 text-yellow-800">
+                    <Clock className="w-3 h-3 mr-1" />
+                    Pending
+                  </span>
+                </div>
+              </div>
+            )) : (
+              <p className="text-gray-500 text-center py-4">No recent orders</p>
+            )}
+          </div>
+        </div>
+
+        {/* Low Stock Alerts */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-medium text-gray-900">Low Stock Alerts</h3>
+            <button 
+              onClick={() => window.location.href = '/inventory'}
+              className="text-red-600 hover:text-red-700 text-sm font-medium"
+            >
+              View all
+            </button>
+          </div>
+          <div className="space-y-3">
+            {lowStockItems.length > 0 ? lowStockItems.map((item) => (
+              <div key={`${item.warehouse_id}-${item.item_id}`} className="flex items-center justify-between p-3 bg-orange-50 rounded-lg border border-orange-200">
+                <div className="flex items-center">
+                  <div className="p-2 bg-orange-100 rounded-lg mr-3">
+                    <AlertTriangle className="h-4 w-4 text-orange-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{item.item_name}</p>
+                    <p className="text-xs text-gray-500">
+                      {item.warehouse_name}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-bold text-orange-600">{item.quantity} left</p>
+                  <p className="text-xs text-gray-500">{currencyUtils.format(item.item_price)}</p>
+                </div>
+              </div>
+            )) : (
+              <p className="text-gray-500 text-center py-4">All items well stocked</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Recent Returns */}
+      {recentReturns.length > 0 && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-medium text-gray-900">Recent Return Requests</h3>
+            <button 
+              onClick={() => window.location.href = '/returns'}
+              className="text-red-600 hover:text-red-700 text-sm font-medium"
+            >
+              View all
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {recentReturns.map((returnOrder) => (
+              <div key={returnOrder.id} className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-900">{returnOrder.return_number}</span>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-yellow-100 text-yellow-800">
+                    <Clock className="w-3 h-3 mr-1" />
+                    Pending
+                  </span>
+                </div>
+                <p className="text-sm text-gray-600 mb-1">{returnOrder.item_name}</p>
+                <p className="text-xs text-gray-500">
+                  Qty: {returnOrder.quantity} • {returnOrder.dealer_name || returnOrder.salesman_name}
+                </p>
+                <p className="text-sm font-medium text-gray-900 mt-1">
+                  {currencyUtils.format(returnOrder.quantity * returnOrder.item_price)}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 

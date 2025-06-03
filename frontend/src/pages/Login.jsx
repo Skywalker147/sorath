@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { AuthContext } from '../App';
 import { cn } from '../lib/utils';
 import { API_URL } from '../config';
 
@@ -8,7 +9,10 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loginType, setLoginType] = useState('admin'); // 'admin' or 'warehouse'
+  
   const navigate = useNavigate();
+  const { login } = useContext(AuthContext);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -16,7 +20,9 @@ const Login = () => {
     setLoading(true);
 
     try {
-      const response = await fetch(`${API_URL}/admin/login`, {
+      const endpoint = loginType === 'admin' ? '/auth/admin/login' : '/auth/warehouse/login';
+      
+      const response = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -30,9 +36,9 @@ const Login = () => {
         throw new Error(data.error || 'Login failed');
       }
 
-      // Store token in localStorage
-      localStorage.setItem('adminToken', data.token);
-      localStorage.setItem('adminUser', JSON.stringify(data.admin));
+      // Use the login function from AuthContext
+      const userData = data.admin || data.warehouse;
+      login(userData, data.role, data.token);
       
       // Redirect to dashboard
       navigate('/dashboard');
@@ -53,11 +59,39 @@ const Login = () => {
             className="w-48 mx-auto mb-4"
           />
           <h2 className="text-center text-2xl font-bold text-red-600">
-            Admin Portal
+            {loginType === 'admin' ? 'Owner Portal' : 'Warehouse Portal'}
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             Enter your credentials to access the dashboard
           </p>
+        </div>
+
+        {/* Login Type Toggle */}
+        <div className="flex space-x-2 bg-gray-100 rounded-lg p-1">
+          <button
+            type="button"
+            onClick={() => setLoginType('admin')}
+            className={cn(
+              "flex-1 py-2 px-4 text-sm font-medium rounded-md transition-colors",
+              loginType === 'admin'
+                ? "bg-white text-red-600 shadow-sm"
+                : "text-gray-500 hover:text-gray-700"
+            )}
+          >
+            Owner
+          </button>
+          <button
+            type="button"
+            onClick={() => setLoginType('warehouse')}
+            className={cn(
+              "flex-1 py-2 px-4 text-sm font-medium rounded-md transition-colors",
+              loginType === 'warehouse'
+                ? "bg-white text-red-600 shadow-sm"
+                : "text-gray-500 hover:text-gray-700"
+            )}
+          >
+            Warehouse
+          </button>
         </div>
         
         {error && (
@@ -129,6 +163,12 @@ const Login = () => {
             </button>
           </div>
         </form>
+
+        <div className="text-center">
+          <p className="text-sm text-gray-600">
+            Need help? Contact your administrator
+          </p>
+        </div>
       </div>
     </div>
   );
