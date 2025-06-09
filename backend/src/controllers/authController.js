@@ -107,6 +107,106 @@ const warehouseLogin = async (req, res) => {
   }
 };
 
+// Dealer Login
+const dealerLogin = async (req, res) => {
+  try {
+    const { mobile_number, password } = req.body;
+
+    if (!mobile_number || !password) {
+      return res.status(400).json({ error: 'Mobile number and password are required' });
+    }
+
+    // Check if dealer exists and is active
+    const [rows] = await db.execute(
+      'SELECT * FROM dealers WHERE mobile_number = ? AND status = "active"',
+      [mobile_number]
+    );
+
+    if (rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid credentials or dealer inactive' });
+    }
+
+    const dealer = rows[0];
+
+    // Verify password
+    const isValidPassword = await bcrypt.compare(password, dealer.password);
+    if (!isValidPassword) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Generate token
+    const token = generateToken({
+      id: dealer.id,
+      mobile_number: dealer.mobile_number,
+      role: 'dealer'
+    });
+
+    // Remove password from response
+    const { password: _, ...dealerData } = dealer;
+
+    res.json({
+      success: true,
+      token,
+      dealer: dealerData,
+      role: 'dealer'
+    });
+
+  } catch (error) {
+    console.error('Dealer login error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Salesman Login
+const salesmanLogin = async (req, res) => {
+  try {
+    const { mobile_number, password } = req.body;
+
+    if (!mobile_number || !password) {
+      return res.status(400).json({ error: 'Mobile number and password are required' });
+    }
+
+    // Check if salesman exists and is active
+    const [rows] = await db.execute(
+      'SELECT * FROM salesmen WHERE mobile_number = ? AND status = "active"',
+      [mobile_number]
+    );
+
+    if (rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid credentials or salesman inactive' });
+    }
+
+    const salesman = rows[0];
+
+    // Verify password
+    const isValidPassword = await bcrypt.compare(password, salesman.password);
+    if (!isValidPassword) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Generate token
+    const token = generateToken({
+      id: salesman.id,
+      mobile_number: salesman.mobile_number,
+      role: 'salesman'
+    });
+
+    // Remove password from response
+    const { password: _, ...salesmanData } = salesman;
+
+    res.json({
+      success: true,
+      token,
+      salesman: salesmanData,
+      role: 'salesman'
+    });
+
+  } catch (error) {
+    console.error('Salesman login error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 // Generate Registration Code
 const generateRegistrationCode = async (req, res) => {
   try {
@@ -175,6 +275,116 @@ const verifyRegistrationCode = async (req, res) => {
   }
 };
 
+// Verify Code for Password Reset
+const verifyResetCode = async (req, res) => {
+  try {
+    const { code, mobile_number, role } = req.body;
+
+    if (!code || !mobile_number || !role) {
+      return res.status(400).json({ error: 'Code, mobile number and role are required' });
+    }
+
+    if (!['dealer', 'salesman'].includes(role)) {
+      return res.status(400).json({ error: 'Invalid role. Must be dealer or salesman' });
+    }
+
+    // Check if code exists, is not used, and not expired
+    const [codeRows] = await db.execute(
+      'SELECT * FROM registration_codes WHERE code = ? AND role = ? AND is_used = FALSE AND expires_at > NOW()',
+      [code.toUpperCase(), role]
+    );
+
+    if (codeRows.length === 0) {
+      return res.status(400).json({ error: 'Invalid or expired registration code' });
+    }
+
+    // Check if user exists with the mobile number
+    const table = role === 'dealer' ? 'dealers' : 'salesmen';
+    const [userRows] = await db.execute(
+      `SELECT id FROM ${table} WHERE mobile_number = ? AND status = 'active'`,
+      [mobile_number]
+    );
+
+    if (userRows.length === 0) {
+      return res.status(404).json({ error: 'User not found or inactive' });
+    }
+
+    res.json({
+      success: true,
+      message: 'Code verified successfully',
+      code: code.toUpperCase(),
+      role,
+      mobile_number
+    });
+
+  } catch (error) {
+    console.error('Verify reset code error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Reset Password
+const resetPassword = async (req, res) => {
+  try {
+    const { code, mobile_number, role, new_password } = req.body;
+
+    if (!code || !mobile_number || !role || !new_password) {
+      return res.status(400).json({ 
+        error: 'Code, mobile number, role and new password are required' 
+      });
+    }
+
+    if (!['dealer', 'salesman'].includes(role)) {
+      return res.status(400).json({ error: 'Invalid role. Must be dealer or salesman' });
+    }
+
+    // Verify code again
+    const [codeRows] = await db.execute(
+      'SELECT * FROM registration_codes WHERE code = ? AND role = ? AND is_used = FALSE AND expires_at > NOW()',
+      [code.toUpperCase(), role]
+    );
+
+    if (codeRows.length === 0) {
+      return res.status(400).json({ error: 'Invalid or expired registration code' });
+    }
+
+    // Check if user exists
+    const table = role === 'dealer' ? 'dealers' : 'salesmen';
+    const [userRows] = await db.execute(
+      `SELECT id FROM ${table} WHERE mobile_number = ? AND status = 'active'`,
+      [mobile_number]
+    );
+
+    if (userRows.length === 0) {
+      return res.status(404).json({ error: 'User not found or inactive' });
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(new_password, 10);
+
+    // Update password
+    await db.execute(
+      `UPDATE ${table} SET password = ? WHERE mobile_number = ?`,
+      [hashedPassword, mobile_number]
+    );
+
+    // Mark registration code as used
+    await db.execute(
+      'UPDATE registration_codes SET is_used = TRUE WHERE code = ?',
+      [code.toUpperCase()]
+    );
+
+    res.json({
+      success: true,
+      message: 'Password reset successfully'
+    });
+
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 // Register User (after OTP verification)
 const registerUser = async (req, res) => {
   try {
@@ -200,13 +410,35 @@ const registerUser = async (req, res) => {
     let insertValues = [];
 
     if (role === 'dealer') {
-      const { name, agency_name, address, pincode, mobile_number } = userData;
-      insertQuery = 'INSERT INTO dealers (name, agency_name, address, pincode, mobile_number, warehouse_id) VALUES (?, ?, ?, ?, ?, ?)';
-      insertValues = [name, agency_name, address, pincode, mobile_number, regCode.warehouse_id];
+      const { name, agency_name, address, pincode, mobile_number, password } = userData;
+      
+      // Validate required fields
+      if (!name || !agency_name || !address || !pincode || !mobile_number || !password) {
+        return res.status(400).json({ 
+          error: 'All fields are required: name, agency_name, address, pincode, mobile_number, password' 
+        });
+      }
+
+      // Hash password
+      const hashedPassword = await bcrypt.hash(password, 10);
+      
+      insertQuery = 'INSERT INTO dealers (name, agency_name, address, pincode, mobile_number, password, warehouse_id) VALUES (?, ?, ?, ?, ?, ?, ?)';
+      insertValues = [name, agency_name, address, pincode, mobile_number, hashedPassword, regCode.warehouse_id];
     } else if (role === 'salesman') {
-      const { name, aadhar_number, pan_number, mobile_number } = userData;
-      insertQuery = 'INSERT INTO salesmen (name, aadhar_number, pan_number, mobile_number, warehouse_id) VALUES (?, ?, ?, ?, ?)';
-      insertValues = [name, aadhar_number, pan_number, mobile_number, regCode.warehouse_id];
+      const { name, aadhar_number, pan_number, mobile_number, password } = userData;
+      
+      // Validate required fields
+      if (!name || !aadhar_number || !pan_number || !mobile_number || !password) {
+        return res.status(400).json({ 
+          error: 'All fields are required: name, aadhar_number, pan_number, mobile_number, password' 
+        });
+      }
+
+      // Hash password
+      const hashedPassword = await bcrypt.hash(password, 10);
+      
+      insertQuery = 'INSERT INTO salesmen (name, aadhar_number, pan_number, mobile_number, password, warehouse_id) VALUES (?, ?, ?, ?, ?, ?)';
+      insertValues = [name, aadhar_number, pan_number, mobile_number, hashedPassword, regCode.warehouse_id];
     } else if (role === 'warehouse') {
       const { name, address, pincode, username, password } = userData;
       const hashedPassword = await bcrypt.hash(password, 10);
@@ -289,8 +521,12 @@ const getProfile = async (req, res) => {
 module.exports = {
   adminLogin,
   warehouseLogin,
+  dealerLogin,
+  salesmanLogin,
   generateRegistrationCode,
   verifyRegistrationCode,
+  verifyResetCode,
+  resetPassword,
   registerUser,
   getProfile
 };

@@ -34,6 +34,7 @@ CREATE TABLE `dealers` (
   `address` text NOT NULL,
   `pincode` varchar(10) NOT NULL,
   `mobile_number` varchar(15) NOT NULL,
+  `password` varchar(255) NOT NULL,
   `warehouse_id` int(11) DEFAULT NULL,
   `status` enum('active','inactive') DEFAULT 'active',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
@@ -44,9 +45,13 @@ CREATE TABLE `dealers` (
 -- Dumping data for table `dealers`
 --
 
-INSERT INTO `dealers` (`id`, `name`, `agency_name`, `address`, `pincode`, `mobile_number`, `warehouse_id`, `status`, `created_at`, `updated_at`) VALUES
-(1, 'John Doe', 'ABC Traders', '123 Main Street, City Name', '123456', '9876543210', 1, 'active', '2025-06-02 14:33:47', '2025-06-03 03:08:30'),
-(3, 'dealer2', 'ABC Traders', '123 Main St', '123456', '5552445257', 3, 'active', '2025-06-04 13:27:18', '2025-06-07 15:34:28');
+INSERT INTO `dealers` (`id`, `name`, `agency_name`, `address`, `pincode`, `mobile_number`, `password`, `warehouse_id`, `status`, `created_at`, `updated_at`) VALUES
+(1, 'John Doe', 'ABC Traders', '123 Main Street, City Name', '123456', '9876543210', '$2b$10$YourHashedPasswordHere', 1, 'active', '2025-06-02 14:33:47', '2025-06-03 03:08:30'),
+(3, 'dealer2', 'ABC Traders', '123 Main St', '123456', '5552445257', '$2b$10$YourHashedPasswordHere', 3, 'active', '2025-06-04 13:27:18', '2025-06-07 15:34:28');
+
+-- Insert test dealer with provided credentials (password: Brimesh@123)
+INSERT INTO `dealers` (`name`, `agency_name`, `address`, `pincode`, `mobile_number`, `password`, `warehouse_id`, `status`) VALUES
+('Test Dealer', 'Test Agency', 'Test Address', '123456', '9825738131', '$2b$10$8K1p/a0dR1xqM8K1p/a0dR1xqM8K1p/a0dR1xqM8K1p/a0dR1xqM', 1, 'active');
 
 -- --------------------------------------------------------
 
@@ -264,6 +269,7 @@ CREATE TABLE `salesmen` (
   `aadhar_number` varchar(12) NOT NULL,
   `pan_number` varchar(10) NOT NULL,
   `mobile_number` varchar(15) NOT NULL,
+  `password` varchar(255) NOT NULL,
   `warehouse_id` int(11) DEFAULT NULL,
   `status` enum('active','inactive') DEFAULT 'active',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
@@ -274,9 +280,9 @@ CREATE TABLE `salesmen` (
 -- Dumping data for table `salesmen`
 --
 
-INSERT INTO `salesmen` (`id`, `name`, `aadhar_number`, `pan_number`, `mobile_number`, `warehouse_id`, `status`, `created_at`, `updated_at`) VALUES
-(1, 'John Doe', '123456789012', 'ABCDE1234F', '+919876543210', 3, 'active', '2025-06-02 17:21:23', '2025-06-07 05:26:47'),
-(2, 'salesman2', '123456712345', 'ABCDE1245F', '+919876554781', 3, 'active', '2025-06-07 15:33:53', '2025-06-07 15:34:20');
+INSERT INTO `salesmen` (`id`, `name`, `aadhar_number`, `pan_number`, `mobile_number`, `password`, `warehouse_id`, `status`, `created_at`, `updated_at`) VALUES
+(1, 'John Doe', '123456789012', 'ABCDE1234F', '+919876543210', '$2b$10$YourHashedPasswordHere', 3, 'active', '2025-06-02 17:21:23', '2025-06-07 05:26:47'),
+(2, 'salesman2', '123456712345', 'ABCDE1245F', '+919876554781', '$2b$10$YourHashedPasswordHere', 3, 'active', '2025-06-07 15:33:53', '2025-06-07 15:34:20');
 
 -- --------------------------------------------------------
 

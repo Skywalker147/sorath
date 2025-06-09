@@ -1,0 +1,118 @@
+Login Endpoints Documentation
+===========================
+
+1. Dealer Login
+--------------
+Endpoint: POST /api/auth/dealer/login
+Content-Type: application/json
+
+Request Body:
+{
+    "mobile_number": "9825738131",
+    "password": "Brimesh@123"
+}
+
+CURL Command:
+curl -X POST http://localhost:5000/api/auth/dealer/login \
+-H "Content-Type: application/json" \
+-d '{
+    "mobile_number": "9825738131",
+    "password": "Brimesh@123"
+}'
+
+Success Response (200 OK):
+{
+    "success": true,
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "dealer": {
+        "id": 1,
+        "name": "Test Dealer",
+        "agency_name": "Test Agency",
+        "address": "Test Address",
+        "pincode": "123456",
+        "mobile_number": "9825738131",
+        "warehouse_id": 1,
+        "status": "active",
+        "created_at": "2025-06-07T15:32:12.000Z",
+        "updated_at": "2025-06-07T15:32:12.000Z"
+    },
+    "role": "dealer"
+}
+
+Error Responses:
+- 400 Bad Request (Missing fields):
+{
+    "error": "Mobile number and password are required"
+}
+
+- 401 Unauthorized (Invalid credentials):
+{
+    "error": "Invalid credentials"
+}
+
+- 401 Unauthorized (Inactive user):
+{
+    "error": "Invalid credentials or dealer inactive"
+}
+
+2. Salesman Login
+----------------
+Endpoint: POST /api/auth/salesman/login
+Content-Type: application/json
+
+Request Body:
+{
+    "mobile_number": "9876543210",
+    "password": "YourPassword123"
+}
+
+CURL Command:
+curl -X POST http://localhost:5000/api/auth/salesman/login \
+-H "Content-Type: application/json" \
+-d '{
+    "mobile_number": "9876543210",
+    "password": "YourPassword123"
+}'
+
+Success Response (200 OK):
+{
+    "success": true,
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "salesman": {
+        "id": 1,
+        "name": "John Doe",
+        "aadhar_number": "123456789012",
+        "pan_number": "ABCDE1234F",
+        "mobile_number": "9876543210",
+        "warehouse_id": 3,
+        "status": "active",
+        "created_at": "2025-06-02T17:21:23.000Z",
+        "updated_at": "2025-06-07T05:26:47.000Z"
+    },
+    "role": "salesman"
+}
+
+Error Responses:
+- 400 Bad Request (Missing fields):
+{
+    "error": "Mobile number and password are required"
+}
+
+- 401 Unauthorized (Invalid credentials):
+{
+    "error": "Invalid credentials"
+}
+
+- 401 Unauthorized (Inactive user):
+{
+    "error": "Invalid credentials or salesman inactive"
+}
+
+Using the Token
+--------------
+After successful login, use the token in subsequent requests by adding it to the Authorization header:
+
+curl -X GET http://localhost:5000/api/auth/profile \
+-H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NSwibW9iaWxlX251bWJlciI6Ijk4MjU3MzgxMzEiLCJyb2xlIjoiZGVhbGVyIiwiaWF0IjoxNzQ5NDYzMzIwLCJleHAiOjE3NDk1NDk3MjB9.xST24sGvfzHDCQE7Ews0EWnsXlImjHIsSYqs96rfpQk"
+
+Note: Replace YOUR_TOKEN_HERE with the token received from the login response. 
