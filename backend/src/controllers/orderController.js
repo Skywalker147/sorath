@@ -7,6 +7,7 @@ const getAllOrders = async (req, res) => {
       warehouseId, 
       dealerId, 
       salesmanId, 
+      orderType,
       transportStatus, 
       paymentStatus, 
       search, 
@@ -22,6 +23,7 @@ const getAllOrders = async (req, res) => {
       warehouseId: warehouseId ? parseInt(warehouseId) : null,
       dealerId: dealerId ? parseInt(dealerId) : null,
       salesmanId: salesmanId ? parseInt(salesmanId) : null,
+      orderType,
       transportStatus,
       paymentStatus,
       search: search?.trim(),
@@ -38,6 +40,12 @@ const getAllOrders = async (req, res) => {
         page: parseInt(page),
         limit: parseInt(limit),
         total: orders.length
+      },
+      meta: {
+        userRole: role,
+        canCreateOrder: ['owner', 'warehouse', 'dealer', 'salesman'].includes(role),
+        canModifyOrder: ['owner', 'warehouse', 'dealer', 'salesman'].includes(role),
+        canDeleteOrder: ['owner', 'warehouse', 'dealer', 'salesman'].includes(role)
       }
     });
   } catch (error) {
@@ -55,12 +63,20 @@ const getOrderById = async (req, res) => {
     const order = await OrderModel.getOrderById(id, role, userId);
     
     if (!order) {
-      return res.status(404).json({ error: 'Order not found' });
+      return res.status(404).json({ error: 'Order not found or access denied' });
     }
+    
+    // Check if user can modify this order
+    const { canModify, reason } = await OrderModel.canModifyOrder(id, role, userId);
     
     res.json({
       success: true,
-      data: order
+      data: order,
+      meta: {
+        userRole: role,
+        canModify,
+        modifyReason: reason
+      }
     });
   } catch (error) {
     console.error('Get order error:', error);
@@ -68,23 +84,95 @@ const getOrderById = async (req, res) => {
   }
 };
 
-// Create order
+// Create order with proper role handling
 const createOrder = async (req, res) => {
   try {
     const { warehouseId, dealerId, salesmanId, items } = req.body;
     const { role, id: userId } = req.user;
 
     // Validation
-    if (!warehouseId || !items || !Array.isArray(items) || items.length === 0) {
+    if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ 
-        error: 'Warehouse ID and items array are required' 
+        error: 'Items array is required' 
       });
     }
 
-    // If user is warehouse, only allow creating orders for their warehouse
-    if (role === 'warehouse' && parseInt(warehouseId) !== userId) {
-      return res.status(403).json({ 
-        error: 'Access denied to create orders for other warehouses' 
+    let targetWarehouseId = warehouseId;
+
+    // Role-specific validations and warehouse ID handling
+    if (role === 'warehouse') {
+      // Warehouse users: use their own warehouse ID
+      targetWarehouseId = userId;
+      
+      // Warehouse must specify a dealer
+      if (!dealerId) {
+        return res.status(400).json({ 
+          error: 'Dealer must be specified when warehouse creates order' 
+        });
+      }
+    } else if (role === 'dealer') {
+      // Dealer creates direct order - dealerId should be their own ID
+      if (dealerId && parseInt(dealerId) !== userId) {
+        return res.status(403).json({ 
+          error: 'Dealer can only create orders for themselves' 
+        });
+      }
+      
+      // Set dealerId to current user if not provided
+      req.body.dealerId = userId;
+      
+      // Dealer cannot specify salesman for direct orders
+      if (salesmanId) {
+        return res.status(400).json({ 
+          error: 'Dealer cannot specify salesman for direct orders' 
+        });
+      }
+      
+      // Dealer must specify warehouse
+      if (!warehouseId) {
+        return res.status(400).json({ 
+          error: 'Warehouse must be specified' 
+        });
+      }
+      targetWarehouseId = warehouseId;
+      
+    } else if (role === 'salesman') {
+      // Salesman must specify dealer and warehouse
+      if (!dealerId) {
+        return res.status(400).json({ 
+          error: 'Salesman must specify dealer when creating order' 
+        });
+      }
+      if (!warehouseId) {
+        return res.status(400).json({ 
+          error: 'Warehouse must be specified' 
+        });
+      }
+      
+      if (salesmanId && parseInt(salesmanId) !== userId) {
+        return res.status(403).json({ 
+          error: 'Salesman can only create orders as themselves' 
+        });
+      }
+      
+      // Set salesmanId to current user if not provided
+      req.body.salesmanId = userId;
+      targetWarehouseId = warehouseId;
+      
+    } else if (role === 'owner') {
+      // Owner needs warehouse and either dealer or salesman
+      if (!warehouseId || (!dealerId && !salesmanId)) {
+        return res.status(400).json({ 
+          error: 'Owner must specify warehouse and either dealer or salesman' 
+        });
+      }
+      targetWarehouseId = warehouseId;
+    }
+
+    // Final validation for warehouseId
+    if (!targetWarehouseId) {
+      return res.status(400).json({ 
+        error: 'Warehouse ID is required' 
       });
     }
 
@@ -109,23 +197,16 @@ const createOrder = async (req, res) => {
       }
     }
 
-    // At least one of dealer or salesman must be specified
-    if (!dealerId && !salesmanId) {
-      return res.status(400).json({ 
-        error: 'Either dealer or salesman must be specified' 
-      });
-    }
-
     const result = await OrderModel.createOrder({
-      warehouseId: parseInt(warehouseId),
-      dealerId: dealerId ? parseInt(dealerId) : null,
-      salesmanId: salesmanId ? parseInt(salesmanId) : null,
+      warehouseId: parseInt(targetWarehouseId),
+      dealerId: req.body.dealerId ? parseInt(req.body.dealerId) : null,
+      salesmanId: req.body.salesmanId ? parseInt(req.body.salesmanId) : null,
       items: items.map(item => ({
         item_id: parseInt(item.item_id),
         quantity: parseInt(item.quantity),
         price_per_item: parseFloat(item.price_per_item)
       }))
-    });
+    }, role, userId);
 
     res.status(201).json({
       success: true,
@@ -135,6 +216,8 @@ const createOrder = async (req, res) => {
   } catch (error) {
     console.error('Create order error:', error);
     if (error.message.includes('Insufficient inventory')) {
+      res.status(400).json({ error: error.message });
+    } else if (error.message.includes('Invalid order configuration')) {
       res.status(400).json({ error: error.message });
     } else {
       res.status(500).json({ error: 'Internal server error' });
@@ -148,6 +231,13 @@ const updateOrder = async (req, res) => {
     const { id } = req.params;
     const { dealerId, salesmanId, items } = req.body;
     const { role, id: userId } = req.user;
+
+    // Check if user can modify this order
+    const { canModify, reason } = await OrderModel.canModifyOrder(id, role, userId);
+    
+    if (!canModify) {
+      return res.status(403).json({ error: reason });
+    }
 
     // Validate items if provided
     if (items && Array.isArray(items)) {
@@ -218,6 +308,16 @@ const updateOrderStatus = async (req, res) => {
       });
     }
 
+    // Role-based restrictions for status updates
+    if (role === 'dealer' || role === 'salesman') {
+      // Dealers and salesmen can only update payment status, not transport status
+      if (transportStatus) {
+        return res.status(403).json({ 
+          error: 'Only warehouse and owner can update transport status' 
+        });
+      }
+    }
+
     const affected = await OrderModel.updateOrderStatus(id, {
       transportStatus,
       paymentStatus
@@ -243,6 +343,13 @@ const deleteOrder = async (req, res) => {
     const { id } = req.params;
     const { role, id: userId } = req.user;
 
+    // Check if user can modify this order
+    const { canModify, reason } = await OrderModel.canModifyOrder(id, role, userId);
+    
+    if (!canModify) {
+      return res.status(403).json({ error: reason });
+    }
+
     await OrderModel.deleteOrder(id, role, userId);
 
     res.json({
@@ -266,20 +373,20 @@ const getOrderStats = async (req, res) => {
   try {
     const { warehouseId } = req.query;
     const { role, id: userId } = req.user;
-    
-    // If user is warehouse, only show their stats
-    let targetWarehouseId = warehouseId;
-    if (role === 'warehouse') {
-      targetWarehouseId = userId;
-    }
 
     const stats = await OrderModel.getOrderStats(
-      targetWarehouseId ? parseInt(targetWarehouseId) : null
+      warehouseId ? parseInt(warehouseId) : null,
+      role,
+      userId
     );
 
     res.json({
       success: true,
-      data: stats
+      data: stats,
+      meta: {
+        userRole: role,
+        scope: role === 'owner' ? 'all' : 'filtered'
+      }
     });
   } catch (error) {
     console.error('Get order stats error:', error);
@@ -292,21 +399,21 @@ const getMonthlySales = async (req, res) => {
   try {
     const { warehouseId, year = new Date().getFullYear() } = req.query;
     const { role, id: userId } = req.user;
-    
-    // If user is warehouse, only show their data
-    let targetWarehouseId = warehouseId;
-    if (role === 'warehouse') {
-      targetWarehouseId = userId;
-    }
 
     const salesData = await OrderModel.getMonthlySales(
-      targetWarehouseId ? parseInt(targetWarehouseId) : null,
-      parseInt(year)
+      warehouseId ? parseInt(warehouseId) : null,
+      parseInt(year),
+      role,
+      userId
     );
 
     res.json({
       success: true,
-      data: salesData
+      data: salesData,
+      meta: {
+        userRole: role,
+        year: parseInt(year)
+      }
     });
   } catch (error) {
     console.error('Get monthly sales error:', error);
@@ -319,24 +426,89 @@ const getPendingOrders = async (req, res) => {
   try {
     const { warehouseId, limit = 10 } = req.query;
     const { role, id: userId } = req.user;
-    
-    // If user is warehouse, only show their orders
+
+    const orders = await OrderModel.getPendingOrders(
+      warehouseId ? parseInt(warehouseId) : null,
+      parseInt(limit),
+      role,
+      userId
+    );
+
+    res.json({
+      success: true,
+      data: orders,
+      meta: {
+        userRole: role,
+        limit: parseInt(limit)
+      }
+    });
+  } catch (error) {
+    console.error('Get pending orders error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Get orders by type
+const getOrdersByType = async (req, res) => {
+  try {
+    const { type } = req.params;
+    const { warehouseId } = req.query;
+    const { role, id: userId } = req.user;
+
+    if (!['direct_dealer', 'salesman_for_dealer', 'warehouse_for_dealer'].includes(type)) {
+      return res.status(400).json({ 
+        error: 'Invalid order type. Must be direct_dealer, salesman_for_dealer, or warehouse_for_dealer' 
+      });
+    }
+
+    // Role-based warehouse filtering
     let targetWarehouseId = warehouseId;
     if (role === 'warehouse') {
       targetWarehouseId = userId;
     }
 
-    const orders = await OrderModel.getPendingOrders(
-      targetWarehouseId ? parseInt(targetWarehouseId) : null,
-      parseInt(limit)
+    const orders = await OrderModel.getOrdersByType(
+      type, 
+      targetWarehouseId ? parseInt(targetWarehouseId) : null
     );
 
     res.json({
       success: true,
-      data: orders
+      data: orders,
+      meta: {
+        orderType: type,
+        userRole: role
+      }
     });
   } catch (error) {
-    console.error('Get pending orders error:', error);
+    console.error('Get orders by type error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Get user's order summary
+const getUserOrderSummary = async (req, res) => {
+  try {
+    const { role, id: userId } = req.user;
+
+    if (!['warehouse', 'dealer', 'salesman'].includes(role)) {
+      return res.status(403).json({ 
+        error: 'Only warehouse, dealer, and salesman can access order summary' 
+      });
+    }
+
+    const summary = await OrderModel.getOrdersSummaryByRole(role, userId);
+
+    res.json({
+      success: true,
+      data: summary,
+      meta: {
+        userRole: role,
+        userId
+      }
+    });
+  } catch (error) {
+    console.error('Get user order summary error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -361,6 +533,13 @@ const bulkUpdateStatus = async (req, res) => {
     if (paymentStatus && !['pending', 'partial', 'paid'].includes(paymentStatus)) {
       return res.status(400).json({ 
         error: 'Invalid payment status' 
+      });
+    }
+
+    // Role-based restrictions for status updates
+    if ((role === 'dealer' || role === 'salesman') && transportStatus) {
+      return res.status(403).json({ 
+        error: 'Only warehouse and owner can update transport status' 
       });
     }
 
@@ -444,6 +623,8 @@ module.exports = {
   getOrderStats,
   getMonthlySales,
   getPendingOrders,
+  getOrdersByType,
+  getUserOrderSummary,
   bulkUpdateStatus,
   generateInvoice,
   exportOrders

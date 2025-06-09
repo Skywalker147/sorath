@@ -21,7 +21,10 @@ import {
   MoreHorizontal,
   CheckCircle,
   XCircle,
-  AlertCircle
+  AlertCircle,
+  Users,
+  UserCheck,
+  Store
 } from 'lucide-react';
 import { AuthContext } from '../App';
 import { API_URL } from '../config';
@@ -38,6 +41,7 @@ const OrderManagement = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedWarehouse, setSelectedWarehouse] = useState('');
+  const [orderTypeFilter, setOrderTypeFilter] = useState('all');
   const [transportFilter, setTransportFilter] = useState('all');
   const [paymentFilter, setPaymentFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -48,7 +52,7 @@ const OrderManagement = () => {
 
   useEffect(() => {
     fetchData();
-  }, [selectedWarehouse, transportFilter, paymentFilter]);
+  }, [selectedWarehouse, orderTypeFilter, transportFilter, paymentFilter]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -61,35 +65,44 @@ const OrderManagement = () => {
 
       const params = new URLSearchParams();
       if (selectedWarehouse) params.append('warehouseId', selectedWarehouse);
+      if (orderTypeFilter !== 'all') params.append('orderType', orderTypeFilter);
       if (transportFilter !== 'all') params.append('transportStatus', transportFilter);
       if (paymentFilter !== 'all') params.append('paymentStatus', paymentFilter);
 
-      const [ordersRes, statsRes, warehousesRes, dealersRes, salesmenRes, itemsRes] = await Promise.all([
+      const requests = [
         fetch(`${API_URL}/orders?${params}`, { headers }),
         fetch(`${API_URL}/orders/stats?${selectedWarehouse ? `warehouseId=${selectedWarehouse}` : ''}`, { headers }),
-        role === 'owner' ? fetch(`${API_URL}/users/warehouses`, { headers }) : Promise.resolve({ json: () => ({ data: [] }) }),
         fetch(`${API_URL}/users/dealers`, { headers }),
         fetch(`${API_URL}/users/salesmen`, { headers }),
         fetch(`${API_URL}/items`, { headers })
-      ]);
+      ];
 
-      const [ordersData, statsData, warehousesData, dealersData, salesmenData, itemsData] = await Promise.all([
+      // Only fetch warehouses if user is owner
+      if (role === 'owner') {
+        requests.push(fetch(`${API_URL}/users/warehouses`, { headers }));
+      }
+
+      const responses = await Promise.all(requests);
+      const [ordersRes, statsRes, dealersRes, salesmenRes, itemsRes, warehousesRes] = responses;
+
+      const [ordersData, statsData, dealersData, salesmenData, itemsData, warehousesData] = await Promise.all([
         ordersRes.json(),
         statsRes.json(),
-        warehousesRes.json(),
         dealersRes.json(),
         salesmenRes.json(),
-        itemsRes.json()
+        itemsRes.json(),
+        warehousesRes ? warehousesRes.json() : Promise.resolve({ data: [] })
       ]);
 
       setOrders(ordersData.data || []);
       setStats(statsData.data || {});
-      setWarehouses(warehousesData.data || []);
       setDealers(dealersData.data || []);
       setSalesmen(salesmenData.data || []);
       setItems(itemsData.data || []);
+      setWarehouses(warehousesData.data || []);
     } catch (error) {
       console.error('Error fetching data:', error);
+      alert('Error fetching data. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -111,13 +124,13 @@ const OrderManagement = () => {
       if (data.success) {
         fetchData();
         setShowCreateModal(false);
-        alert(`Order created successfully! Order Number: ${data.data.orderNumber}`);
+        alert(`Order created successfully! Order Number: ${data.data.orderNumber}\nOrder Type: ${data.data.orderType}`);
       } else {
-        alert(data.error);
+        alert(data.error || 'Failed to create order');
       }
     } catch (error) {
       console.error('Error creating order:', error);
-      alert('Error creating order');
+      alert('Error creating order. Please try again.');
     }
   };
 
@@ -137,10 +150,11 @@ const OrderManagement = () => {
       if (data.success) {
         fetchData();
       } else {
-        alert(data.error);
+        alert(data.error || 'Failed to update status');
       }
     } catch (error) {
       console.error('Error updating status:', error);
+      alert('Error updating status. Please try again.');
     }
   };
 
@@ -162,21 +176,60 @@ const OrderManagement = () => {
         fetchData();
         alert('Order deleted successfully');
       } else {
-        alert(data.error);
+        alert(data.error || 'Failed to delete order');
       }
     } catch (error) {
       console.error('Error deleting order:', error);
-      alert('Error deleting order');
+      alert('Error deleting order. Please try again.');
     }
   };
 
   const filteredOrders = orders.filter(order => {
-    const matchesSearch = order.order_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const matchesSearch = order.order_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          order.dealer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          order.salesman_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         order.warehouse_name.toLowerCase().includes(searchTerm.toLowerCase());
+                         order.warehouse_name?.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesSearch;
   });
+
+  const getOrderTypeIcon = (orderType) => {
+    switch (orderType) {
+      case 'direct_dealer':
+        return <User className="w-4 h-4" />;
+      case 'salesman_for_dealer':
+        return <Users className="w-4 h-4" />;
+      case 'warehouse_for_dealer':
+        return <Store className="w-4 h-4" />;
+      default:
+        return <ShoppingCart className="w-4 h-4" />;
+    }
+  };
+
+  const getOrderTypeText = (orderType) => {
+    switch (orderType) {
+      case 'direct_dealer':
+        return 'Direct';
+      case 'salesman_for_dealer':
+        return 'Via Salesman';
+      case 'warehouse_for_dealer':
+        return 'Warehouse';
+      default:
+        return 'Unknown';
+    }
+  };
+
+  const getOrderTypeBadgeColor = (orderType) => {
+    switch (orderType) {
+      case 'direct_dealer':
+        return 'bg-blue-100 text-blue-800';
+      case 'salesman_for_dealer':
+        return 'bg-green-100 text-green-800';
+      case 'warehouse_for_dealer':
+        return 'bg-purple-100 text-purple-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
 
   const StatusBadge = ({ status, type }) => {
     const getConfig = () => {
@@ -209,6 +262,19 @@ const OrderManagement = () => {
     );
   };
 
+  const OrderTypeBadge = ({ orderType }) => {
+    const icon = getOrderTypeIcon(orderType);
+    const text = getOrderTypeText(orderType);
+    const color = getOrderTypeBadgeColor(orderType);
+    
+    return (
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${color}`}>
+        {icon}
+        <span className="ml-1">{text}</span>
+      </span>
+    );
+  };
+
   const CreateOrderModal = () => {
     const [formData, setFormData] = useState({
       warehouseId: '',
@@ -216,6 +282,15 @@ const OrderManagement = () => {
       salesmanId: '',
       items: [{ item_id: '', quantity: '', price_per_item: '' }]
     });
+
+    // Auto-set warehouse for warehouse users
+    useEffect(() => {
+      if (role === 'warehouse') {
+        // For warehouse users, we don't need to set warehouseId in form
+        // Backend will automatically use their warehouse ID
+        setFormData(prev => ({ ...prev, warehouseId: 'auto' }));
+      }
+    }, [role]);
 
     const addItem = () => {
       setFormData({
@@ -236,12 +311,37 @@ const OrderManagement = () => {
       setFormData({ ...formData, items: newItems });
     };
 
+    const handleItemSelection = (index, itemId) => {
+      const selectedItem = items.find(i => i.id === parseInt(itemId));
+      
+      const newItems = formData.items.map((item, i) => {
+        if (i === index) {
+          return {
+            ...item,
+            item_id: itemId,
+            price_per_item: selectedItem ? selectedItem.price.toString() : ''
+          };
+        }
+        return item;
+      });
+      
+      setFormData({ ...formData, items: newItems });
+    };
+
     const handleSubmit = (e) => {
       e.preventDefault();
       
-      if (!formData.warehouseId || (!formData.dealerId && !formData.salesmanId)) {
-        alert('Please select warehouse and either dealer or salesman');
-        return;
+      // Validation based on role
+      if (role === 'warehouse') {
+        if (!formData.dealerId) {
+          alert('Please select a dealer');
+          return;
+        }
+      } else if (role === 'owner') {
+        if (!formData.warehouseId || (!formData.dealerId && !formData.salesmanId)) {
+          alert('Please select warehouse and either dealer or salesman');
+          return;
+        }
       }
 
       const validItems = formData.items.filter(item => 
@@ -253,16 +353,27 @@ const OrderManagement = () => {
         return;
       }
 
-      createOrder({
-        warehouseId: parseInt(formData.warehouseId),
-        dealerId: formData.dealerId ? parseInt(formData.dealerId) : null,
-        salesmanId: formData.salesmanId ? parseInt(formData.salesmanId) : null,
+      const orderData = {
         items: validItems.map(item => ({
           item_id: parseInt(item.item_id),
           quantity: parseInt(item.quantity),
           price_per_item: parseFloat(item.price_per_item)
         }))
-      });
+      };
+
+      // Add fields based on role
+      if (role === 'warehouse') {
+        // For warehouse users, backend will automatically use their warehouse ID
+        orderData.dealerId = parseInt(formData.dealerId);
+      } else if (role === 'owner') {
+        // Owner can create orders for any warehouse
+        orderData.warehouseId = parseInt(formData.warehouseId);
+        if (formData.dealerId) orderData.dealerId = parseInt(formData.dealerId);
+        if (formData.salesmanId) orderData.salesmanId = parseInt(formData.salesmanId);
+      }
+
+      console.log('Creating order with data:', orderData); // Debug log
+      createOrder(orderData);
     };
 
     const calculateTotal = () => {
@@ -280,28 +391,36 @@ const OrderManagement = () => {
           <h3 className="text-lg font-medium mb-4">Create New Order</h3>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Warehouse Selection - Only for Owner */}
+              {role === 'owner' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Warehouse</label>
+                  <select
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                    value={formData.warehouseId}
+                    onChange={(e) => setFormData({...formData, warehouseId: e.target.value})}
+                    required
+                  >
+                    <option value="">Select warehouse</option>
+                    {warehouses.filter(w => w.status === 'active').map(warehouse => (
+                      <option key={warehouse.id} value={warehouse.id}>
+                        {warehouse.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Dealer Selection */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Warehouse</label>
-                <select
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-                  value={formData.warehouseId}
-                  onChange={(e) => setFormData({...formData, warehouseId: e.target.value})}
-                  required
-                >
-                  <option value="">Select warehouse</option>
-                  {warehouses.filter(w => w.status === 'active').map(warehouse => (
-                    <option key={warehouse.id} value={warehouse.id}>
-                      {warehouse.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Dealer</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Dealer {role === 'warehouse' ? '(Required)' : ''}
+                </label>
                 <select
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                   value={formData.dealerId}
                   onChange={(e) => setFormData({...formData, dealerId: e.target.value})}
+                  required={role === 'warehouse'}
                 >
                   <option value="">Select dealer</option>
                   {dealers.filter(d => d.status === 'active').map(dealer => (
@@ -311,23 +430,39 @@ const OrderManagement = () => {
                   ))}
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Salesman</label>
-                <select
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-                  value={formData.salesmanId}
-                  onChange={(e) => setFormData({...formData, salesmanId: e.target.value})}
-                >
-                  <option value="">Select salesman</option>
-                  {salesmen.filter(s => s.status === 'active').map(salesman => (
-                    <option key={salesman.id} value={salesman.id}>
-                      {salesman.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+
+              {/* Salesman Selection - Only for Owner */}
+              {role === 'owner' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Salesman</label>
+                  <select
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                    value={formData.salesmanId}
+                    onChange={(e) => setFormData({...formData, salesmanId: e.target.value})}
+                  >
+                    <option value="">Select salesman</option>
+                    {salesmen.filter(s => s.status === 'active').map(salesman => (
+                      <option key={salesman.id} value={salesman.id}>
+                        {salesman.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
+            {/* Order Type Info */}
+            <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+              <h4 className="text-sm font-medium text-blue-800 mb-1">Order Type</h4>
+              <p className="text-sm text-blue-700">
+                {role === 'warehouse' && 'You are creating a warehouse order for the selected dealer.'}
+                {role === 'owner' && !formData.salesmanId && formData.dealerId && 'Creating a direct dealer order or warehouse order.'}
+                {role === 'owner' && formData.salesmanId && formData.dealerId && 'Creating a salesman order for the selected dealer.'}
+                {role === 'owner' && !formData.dealerId && !formData.salesmanId && 'Please select dealer and/or salesman to determine order type.'}
+              </p>
+            </div>
+
+            {/* Items Section */}
             <div>
               <div className="flex justify-between items-center mb-3">
                 <label className="block text-sm font-medium text-gray-700">Order Items</label>
@@ -344,31 +479,27 @@ const OrderManagement = () => {
                 {formData.items.map((item, index) => (
                   <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-3 p-3 border border-gray-200 rounded-md">
                     <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Item</label>
                       <select
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-red-500 text-sm"
                         value={item.item_id}
-                        onChange={(e) => {
-                          const selectedItem = items.find(i => i.id === parseInt(e.target.value));
-                          updateItem(index, 'item_id', e.target.value);
-                          if (selectedItem) {
-                            updateItem(index, 'price_per_item', selectedItem.price);
-                          }
-                        }}
+                        onChange={(e) => handleItemSelection(index, e.target.value)}
                         required
                       >
                         <option value="">Select item</option>
-                        {items.filter(i => i.status === 'active').map(item => (
-                          <option key={item.id} value={item.id}>
-                            {item.name} - {currencyUtils.format(item.price)}
+                        {items.filter(i => i.status === 'active').map(itemOption => (
+                          <option key={itemOption.id} value={itemOption.id}>
+                            {itemOption.name}
                           </option>
                         ))}
                       </select>
                     </div>
                     <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Quantity</label>
                       <input
                         type="number"
                         min="1"
-                        placeholder="Quantity"
+                        placeholder="Qty"
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-red-500 text-sm"
                         value={item.quantity}
                         onChange={(e) => updateItem(index, 'quantity', e.target.value)}
@@ -376,29 +507,33 @@ const OrderManagement = () => {
                       />
                     </div>
                     <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Price per item</label>
                       <input
                         type="number"
                         step="0.01"
                         min="0"
-                        placeholder="Price per item"
+                        placeholder="Price"
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-red-500 text-sm"
                         value={item.price_per_item}
                         onChange={(e) => updateItem(index, 'price_per_item', e.target.value)}
                         required
                       />
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">
-                        {item.quantity && item.price_per_item ? 
-                          currencyUtils.format(parseInt(item.quantity) * parseFloat(item.price_per_item)) : 
-                          '₹0'
-                        }
-                      </span>
+                    <div className="flex items-end justify-between">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Total</label>
+                        <span className="text-sm font-medium">
+                          {item.quantity && item.price_per_item ? 
+                            currencyUtils.format(parseInt(item.quantity) * parseFloat(item.price_per_item)) : 
+                            '₹0'
+                          }
+                        </span>
+                      </div>
                       {formData.items.length > 1 && (
                         <button
                           type="button"
                           onClick={() => removeItem(index)}
-                          className="p-1 text-red-600 hover:bg-red-50 rounded"
+                          className="p-1 text-red-600 hover:bg-red-50 rounded mb-2"
                         >
                           <X className="h-4 w-4" />
                         </button>
@@ -464,6 +599,10 @@ const OrderManagement = () => {
                   <div className="flex justify-between">
                     <span className="text-gray-600">Order Number:</span>
                     <span className="font-medium">{selectedOrder.order_number}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Order Type:</span>
+                    <OrderTypeBadge orderType={selectedOrder.order_type} />
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Order Date:</span>
@@ -581,7 +720,11 @@ const OrderManagement = () => {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Order Management</h1>
-          <p className="text-gray-600">Manage customer orders and track deliveries</p>
+          <p className="text-gray-600">
+            Manage customer orders and track deliveries
+            {role === 'warehouse' && ' - Warehouse Dashboard'}
+            {role === 'owner' && ' - Owner Dashboard'}
+          </p>
         </div>
         <div className="flex space-x-3">
           <button
@@ -669,7 +812,8 @@ const OrderManagement = () => {
             </div>
           </div>
           
-          {role === 'owner' && (
+          {/* Warehouse Filter - Only for Owner */}
+          {role === 'owner' && warehouses.length > 0 && (
             <div className="sm:w-48">
               <select
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
@@ -685,6 +829,20 @@ const OrderManagement = () => {
               </select>
             </div>
           )}
+
+          {/* Order Type Filter */}
+          <div className="sm:w-40">
+            <select
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+              value={orderTypeFilter}
+              onChange={(e) => setOrderTypeFilter(e.target.value)}
+            >
+              <option value="all">All Types</option>
+              <option value="direct_dealer">Direct</option>
+              <option value="salesman_for_dealer">Via Salesman</option>
+              <option value="warehouse_for_dealer">Warehouse</option>
+            </select>
+          </div>
 
           <div className="sm:w-40">
             <select
@@ -731,6 +889,9 @@ const OrderManagement = () => {
                   Order
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Type
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Customer
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -766,6 +927,9 @@ const OrderManagement = () => {
                         <div className="text-sm text-gray-500">ID: {order.id}</div>
                       </div>
                     </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <OrderTypeBadge orderType={order.order_type} />
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div>
@@ -813,9 +977,12 @@ const OrderManagement = () => {
                             if (data.success) {
                               setSelectedOrder(data.data);
                               setShowViewModal(true);
+                            } else {
+                              alert(data.error || 'Failed to fetch order details');
                             }
                           } catch (error) {
                             console.error('Error fetching order details:', error);
+                            alert('Error fetching order details');
                           }
                         }}
                         className="p-2 text-blue-600 hover:bg-blue-50 rounded-md"
@@ -824,7 +991,9 @@ const OrderManagement = () => {
                         <Eye className="h-4 w-4" />
                       </button>
                       
-                      {(order.transport_status === 'pending' || order.transport_status === 'dispatched') && (
+                      {/* Transport Status Update - Only for warehouse and owner, only if not delivered/cancelled */}
+                      {['owner', 'warehouse'].includes(role) && 
+                       ['pending', 'dispatched'].includes(order.transport_status) && (
                         <select
                           className="text-xs border border-gray-300 rounded px-2 py-1"
                           value={order.transport_status}
@@ -836,7 +1005,19 @@ const OrderManagement = () => {
                           <option value="cancelled">Cancelled</option>
                         </select>
                       )}
+
+                      {/* Payment Status Update - All roles can update payment status */}
+                      <select
+                        className="text-xs border border-gray-300 rounded px-2 py-1"
+                        value={order.payment_status}
+                        onChange={(e) => updateOrderStatus(order.id, { paymentStatus: e.target.value })}
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="partial">Partial</option>
+                        <option value="paid">Paid</option>
+                      </select>
                       
+                      {/* Delete Button - Only for pending orders */}
                       {order.transport_status === 'pending' && (
                         <button
                           onClick={() => deleteOrder(order.id)}

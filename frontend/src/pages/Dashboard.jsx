@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
+
 import { 
   TrendingUp, 
   TrendingDown,
@@ -452,6 +453,7 @@ const Dashboard = () => {
           </div>
         </div>
       )}
+      
     </div>
   );
 };

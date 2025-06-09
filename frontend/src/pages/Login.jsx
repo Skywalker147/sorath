@@ -22,6 +22,8 @@ const Login = () => {
     try {
       const endpoint = loginType === 'admin' ? '/auth/admin/login' : '/auth/warehouse/login';
       
+      console.log('Attempting login:', { loginType, endpoint, username }); // Debug log
+      
       const response = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
         headers: {
@@ -31,18 +33,32 @@ const Login = () => {
       });
 
       const data = await response.json();
+      console.log('Login response:', data); // Debug log
 
       if (!response.ok) {
         throw new Error(data.error || 'Login failed');
       }
 
+      // Extract user data and role from response
+      const userData = data.admin || data.warehouse || data.user;
+      const userRole = data.role;
+      const token = data.token;
+
+      console.log('Extracted login data:', { userData, userRole, token }); // Debug log
+
+      if (!userData || !userRole || !token) {
+        throw new Error('Invalid login response format');
+      }
+
       // Use the login function from AuthContext
-      const userData = data.admin || data.warehouse;
-      login(userData, data.role, data.token);
+      login(userData, userRole, token);
+      
+      console.log('Login completed, navigating to dashboard...'); // Debug log
       
       // Redirect to dashboard
       navigate('/dashboard');
     } catch (err) {
+      console.error('Login error:', err); // Debug log
       setError(err.message);
     } finally {
       setLoading(false);
@@ -57,6 +73,9 @@ const Login = () => {
             src="/logo.jpg" 
             alt="Sorath Masala" 
             className="w-48 mx-auto mb-4"
+            onError={(e) => {
+              e.target.style.display = 'none';
+            }}
           />
           <h2 className="text-center text-2xl font-bold text-red-600">
             {loginType === 'admin' ? 'Owner Portal' : 'Warehouse Portal'}
@@ -70,7 +89,10 @@ const Login = () => {
         <div className="flex space-x-2 bg-gray-100 rounded-lg p-1">
           <button
             type="button"
-            onClick={() => setLoginType('admin')}
+            onClick={() => {
+              setLoginType('admin');
+              setError(''); // Clear any existing errors
+            }}
             className={cn(
               "flex-1 py-2 px-4 text-sm font-medium rounded-md transition-colors",
               loginType === 'admin'
@@ -82,7 +104,10 @@ const Login = () => {
           </button>
           <button
             type="button"
-            onClick={() => setLoginType('warehouse')}
+            onClick={() => {
+              setLoginType('warehouse');
+              setError(''); // Clear any existing errors
+            }}
             className={cn(
               "flex-1 py-2 px-4 text-sm font-medium rounded-md transition-colors",
               loginType === 'warehouse'
@@ -159,10 +184,18 @@ const Login = () => {
                   </svg>
                   Logging in...
                 </span>
-              ) : 'Sign in'}
+              ) : `Sign in as ${loginType === 'admin' ? 'Owner' : 'Warehouse'}`}
             </button>
           </div>
         </form>
+
+        {/* Debug information in development */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
+            <p>Login Type: {loginType}</p>
+            <p>API URL: {API_URL}</p>
+          </div>
+        )}
 
         <div className="text-center">
           <p className="text-sm text-gray-600">

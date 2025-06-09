@@ -19,6 +19,8 @@ CREATE TABLE warehouses (
     name VARCHAR(100) NOT NULL,
     address TEXT NOT NULL,
     pincode VARCHAR(10) NOT NULL,
+    username VARCHAR(50) UNIQUE NOT NULL,  
+    password VARCHAR(255) NOT NULL,        
     status ENUM('active', 'inactive') DEFAULT 'active',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -87,13 +89,18 @@ CREATE TABLE inventory (
     UNIQUE KEY unique_warehouse_item (warehouse_id, item_id)
 );
 
--- Orders table
+-- Orders table (UPDATED - Better handling of order scenarios)
 CREATE TABLE orders (
     id INT PRIMARY KEY AUTO_INCREMENT,
     order_number VARCHAR(20) UNIQUE NOT NULL,
     warehouse_id INT NOT NULL,
     dealer_id INT,
     salesman_id INT,
+    -- NEW FIELDS to handle order scenarios
+    order_type ENUM('direct_dealer', 'salesman_for_dealer', 'warehouse_for_dealer') NOT NULL,
+    placed_by_role ENUM('dealer', 'salesman', 'warehouse') NOT NULL,
+    placed_by_id INT NOT NULL, -- ID of the person who actually placed the order
+    -- END NEW FIELDS
     total_amount DECIMAL(12, 2) NOT NULL,
     transport_status ENUM('pending', 'dispatched', 'delivered', 'cancelled') DEFAULT 'pending',
     payment_status ENUM('pending', 'partial', 'paid') DEFAULT 'pending',
@@ -120,7 +127,23 @@ CREATE TABLE order_items (
     FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
 );
 
--- Return orders table
+-- Payments table (ADDED - This was missing)
+CREATE TABLE payments (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    order_id INT NOT NULL,
+    amount DECIMAL(12, 2) NOT NULL,
+    payment_method ENUM('cash', 'cheque', 'bank_transfer', 'upi', 'card', 'other') NOT NULL,
+    payment_status ENUM('pending', 'paid', 'failed') DEFAULT 'pending',
+    transaction_id VARCHAR(100),
+    payment_date DATE NOT NULL,
+    due_date DATE,
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+);
+
+-- Return orders table (UPDATED - Better tracking)
 CREATE TABLE return_orders (
     id INT PRIMARY KEY AUTO_INCREMENT,
     return_number VARCHAR(20) UNIQUE NOT NULL,
@@ -133,6 +156,10 @@ CREATE TABLE return_orders (
     reason TEXT,
     return_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
+    -- NEW FIELDS to track who initiated the return
+    returned_by_role ENUM('dealer', 'salesman') NOT NULL,
+    returned_by_id INT NOT NULL,
+    -- END NEW FIELDS
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (original_order_id) REFERENCES orders(id) ON DELETE SET NULL,
     FOREIGN KEY (warehouse_id) REFERENCES warehouses(id) ON DELETE CASCADE,
@@ -150,5 +177,8 @@ CREATE INDEX idx_orders_warehouse ON orders(warehouse_id);
 CREATE INDEX idx_orders_dealer ON orders(dealer_id);
 CREATE INDEX idx_orders_salesman ON orders(salesman_id);
 CREATE INDEX idx_orders_date ON orders(order_date);
+CREATE INDEX idx_orders_placed_by ON orders(placed_by_role, placed_by_id);
 CREATE INDEX idx_registration_codes_expires ON registration_codes(expires_at);
 CREATE INDEX idx_inventory_warehouse_item ON inventory(warehouse_id, item_id);
+CREATE INDEX idx_payments_order ON payments(order_id);
+CREATE INDEX idx_returns_returned_by ON return_orders(returned_by_role, returned_by_id);

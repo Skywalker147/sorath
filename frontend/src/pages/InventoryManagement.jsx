@@ -18,7 +18,8 @@ import {
   Trash2,
   RefreshCw,
   Download,
-  Upload
+  Upload,
+  Info
 } from 'lucide-react';
 import { AuthContext } from '../App';
 import { API_URL } from '../config';
@@ -39,6 +40,9 @@ const InventoryManagement = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedInventory, setSelectedInventory] = useState(null);
   const [lowStockThreshold, setLowStockThreshold] = useState(10);
+
+  // Check if user can modify inventory (only warehouse users)
+  const canModifyInventory = role === 'warehouse';
 
   useEffect(() => {
     fetchData();
@@ -87,6 +91,11 @@ const InventoryManagement = () => {
   };
 
   const updateInventory = async (warehouseId, itemId, quantity, type = 'set') => {
+    if (!canModifyInventory) {
+      alert('Only warehouse users can modify inventory');
+      return;
+    }
+
     try {
       const token = localStorage.getItem('adminToken');
       const response = await fetch(`${API_URL}/inventory/warehouse/${warehouseId}/item/${itemId}`, {
@@ -113,7 +122,45 @@ const InventoryManagement = () => {
     }
   };
 
+  const addInventory = async (itemId, quantity) => {
+    if (!canModifyInventory) {
+      alert('Only warehouse users can add inventory');
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('adminToken');
+      const { id: userId } = JSON.parse(localStorage.getItem('adminUser')); // Get warehouse ID
+      
+      const response = await fetch(`${API_URL}/inventory/warehouse/${userId}/item/${itemId}`, {
+        method: 'POST', // Changed from PUT to POST for adding new items
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ quantity: parseInt(quantity) })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        fetchData();
+        setShowAddModal(false);
+        alert('Inventory added successfully');
+      } else {
+        alert(data.error);
+      }
+    } catch (error) {
+      console.error('Error adding inventory:', error);
+      alert('Error adding inventory');
+    }
+  };
+
   const transferInventory = async (fromWarehouseId, toWarehouseId, itemId, quantity) => {
+    if (role !== 'owner') {
+      alert('Only owner can transfer inventory between warehouses');
+      return;
+    }
+
     try {
       const token = localStorage.getItem('adminToken');
       const response = await fetch(`${API_URL}/inventory/transfer`, {
@@ -220,6 +267,89 @@ const InventoryManagement = () => {
                 className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
               >
                 Update
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  };
+
+  const AddInventoryModal = () => {
+    const [selectedItemId, setSelectedItemId] = useState('');
+    const [quantity, setQuantity] = useState('');
+
+    // Get items that are not in current warehouse or have zero quantity
+    const availableItems = items.filter(item => {
+      const existingInventory = inventory.find(inv => inv.item_id === item.id);
+      return !existingInventory || existingInventory.quantity === 0;
+    });
+
+    const handleSubmit = (e) => {
+      e.preventDefault();
+      if (!selectedItemId || !quantity || isNaN(quantity) || quantity <= 0) {
+        alert('Please select an item and enter a valid quantity');
+        return;
+      }
+      addInventory(selectedItemId, quantity);
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg p-6 w-full max-w-md">
+          <h3 className="text-lg font-medium mb-4">Add Inventory Item</h3>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Select Item</label>
+              <select
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                value={selectedItemId}
+                onChange={(e) => setSelectedItemId(e.target.value)}
+                required
+              >
+                <option value="">Choose an item</option>
+                {availableItems.map(item => (
+                  <option key={item.id} value={item.id}>
+                    {item.name} - {currencyUtils.format(item.price)}
+                  </option>
+                ))}
+              </select>
+              {availableItems.length === 0 && (
+                <p className="text-sm text-gray-500 mt-1">
+                  All items are already in your inventory. Use edit to update quantities.
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Initial Quantity</label>
+              <input
+                type="number"
+                min="1"
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                placeholder="Enter quantity"
+              />
+            </div>
+            <div className="flex justify-end space-x-3 pt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddModal(false);
+                  setSelectedItemId('');
+                  setQuantity('');
+                }}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={availableItems.length === 0}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+              >
+                Add Item
               </button>
             </div>
           </form>
@@ -336,9 +466,23 @@ const InventoryManagement = () => {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Inventory Management</h1>
-          <p className="text-gray-600">Manage warehouse stock and inventory levels</p>
+          <p className="text-gray-600">
+            {role === 'owner' 
+              ? 'View warehouse stock and inventory levels' 
+              : 'Manage warehouse stock and inventory levels'
+            }
+          </p>
         </div>
         <div className="flex space-x-3">
+          {canModifyInventory && (
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Item
+            </button>
+          )}
           <button
             onClick={fetchData}
             className="flex items-center px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
@@ -348,6 +492,21 @@ const InventoryManagement = () => {
           </button>
         </div>
       </div>
+
+      {/* Role-based Info Banner */}
+      {role === 'owner' && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-center">
+            <Info className="h-5 w-5 text-blue-600 mr-3" />
+            <div>
+              <h3 className="text-sm font-medium text-blue-800">Owner View Mode</h3>
+              <p className="text-sm text-blue-700">
+                You can view inventory across all warehouses. Only warehouse users can modify inventory quantities.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -558,16 +717,29 @@ const InventoryManagement = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex items-center justify-end space-x-2">
-                      <button
-                        onClick={() => {
-                          setSelectedInventory(item);
-                          setShowUpdateModal(true);
-                        }}
-                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-md"
-                        title="Update Inventory"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </button>
+                      {canModifyInventory && (
+                        <button
+                          onClick={() => {
+                            setSelectedInventory(item);
+                            setShowUpdateModal(true);
+                          }}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-md"
+                          title="Update Inventory"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                      )}
+                      
+                      {!canModifyInventory && (
+                        <button
+                          className="p-2 text-gray-400 hover:bg-gray-50 rounded-md"
+                          title="View Only (Owner Mode)"
+                          disabled
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                      )}
+                      
                       {role === 'owner' && (
                         <button
                           onClick={() => {
@@ -600,11 +772,15 @@ const InventoryManagement = () => {
       </div>
 
       {/* Modals */}
-      {showUpdateModal && selectedInventory && (
+      {showAddModal && canModifyInventory && (
+        <AddInventoryModal />
+      )}
+
+      {showUpdateModal && selectedInventory && canModifyInventory && (
         <UpdateInventoryModal />
       )}
 
-      {showTransferModal && selectedInventory && (
+      {showTransferModal && selectedInventory && role === 'owner' && (
         <TransferInventoryModal />
       )}
     </div>

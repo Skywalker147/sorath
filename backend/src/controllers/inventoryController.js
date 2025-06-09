@@ -1,4 +1,5 @@
 const InventoryModel = require('../models/inventoryModel');
+const db = require('../config/db');
 
 // Get inventory
 const getInventory = async (req, res) => {
@@ -30,7 +31,12 @@ const getInventory = async (req, res) => {
 
     res.json({
       success: true,
-      data: inventory
+      data: inventory,
+      meta: {
+        userRole: role,
+        canModify: role === 'warehouse', // Only warehouse can modify
+        canTransfer: role === 'owner'     // Only owner can transfer
+      }
     });
   } catch (error) {
     console.error('Get inventory error:', error);
@@ -42,11 +48,23 @@ const getInventory = async (req, res) => {
 const getItemInventory = async (req, res) => {
   try {
     const { itemId } = req.params;
-    const inventory = await InventoryModel.getItemInventory(itemId);
+    const { role, id: userId } = req.user;
+    
+    let inventory = await InventoryModel.getItemInventory(itemId);
+    
+    // If user is warehouse, filter to only their warehouse
+    if (role === 'warehouse') {
+      inventory = inventory.filter(item => item.warehouse_id === userId);
+    }
 
     res.json({
       success: true,
-      data: inventory
+      data: inventory,
+      meta: {
+        userRole: role,
+        canModify: role === 'warehouse',
+        canTransfer: role === 'owner'
+      }
     });
   } catch (error) {
     console.error('Get item inventory error:', error);
@@ -73,7 +91,12 @@ const getSpecificInventory = async (req, res) => {
 
     res.json({
       success: true,
-      data: inventory
+      data: inventory,
+      meta: {
+        userRole: role,
+        canModify: role === 'warehouse',
+        canTransfer: role === 'owner'
+      }
     });
   } catch (error) {
     console.error('Get specific inventory error:', error);
@@ -81,12 +104,93 @@ const getSpecificInventory = async (req, res) => {
   }
 };
 
-// Update inventory
+// Add new inventory item to warehouse - ONLY for warehouse users
+const addInventoryItem = async (req, res) => {
+  try {
+    const { warehouseId, itemId } = req.params;
+    const { quantity } = req.body;
+    const { role, id: userId } = req.user;
+
+    // CRITICAL: Only warehouse users can add inventory
+    if (role !== 'warehouse') {
+      return res.status(403).json({ 
+        error: 'Only warehouse users can add inventory items' 
+      });
+    }
+
+    // Validation
+    if (quantity === undefined || quantity === null || isNaN(quantity) || quantity <= 0) {
+      return res.status(400).json({ error: 'Valid quantity greater than 0 is required' });
+    }
+
+    // Warehouse can only add to their own inventory
+    if (parseInt(warehouseId) !== userId) {
+      return res.status(403).json({ error: 'Access denied to this warehouse inventory' });
+    }
+
+    // Check if item exists
+    const [itemCheck] = await db.execute(
+      'SELECT id, name, status FROM items WHERE id = ?',
+      [itemId]
+    );
+
+    if (itemCheck.length === 0) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
+    if (itemCheck[0].status !== 'active') {
+      return res.status(400).json({ error: 'Cannot add inactive item to inventory' });
+    }
+
+    // Check if inventory already exists
+    const [existingInventory] = await db.execute(
+      'SELECT id, quantity FROM inventory WHERE warehouse_id = ? AND item_id = ?',
+      [warehouseId, itemId]
+    );
+
+    if (existingInventory.length > 0) {
+      return res.status(400).json({ 
+        error: 'Item already exists in inventory. Use update instead.',
+        currentQuantity: existingInventory[0].quantity
+      });
+    }
+
+    // Add new inventory item
+    const [result] = await db.execute(
+      'INSERT INTO inventory (warehouse_id, item_id, quantity) VALUES (?, ?, ?)',
+      [warehouseId, itemId, parseInt(quantity)]
+    );
+
+    res.json({
+      success: true,
+      message: 'Inventory item added successfully',
+      data: { 
+        inventoryId: result.insertId,
+        warehouseId: parseInt(warehouseId),
+        itemId: parseInt(itemId),
+        quantity: parseInt(quantity),
+        addedBy: 'warehouse'
+      }
+    });
+  } catch (error) {
+    console.error('Add inventory item error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Update inventory - ONLY for warehouse users
 const updateInventory = async (req, res) => {
   try {
     const { warehouseId, itemId } = req.params;
     const { quantity, type = 'set' } = req.body;
     const { role, id: userId } = req.user;
+
+    // CRITICAL: Only warehouse users can modify inventory
+    if (role !== 'warehouse') {
+      return res.status(403).json({ 
+        error: 'Only warehouse users can modify inventory. Owners can only view inventory data.' 
+      });
+    }
 
     // Validation
     if (quantity === undefined || quantity === null) {
@@ -101,8 +205,8 @@ const updateInventory = async (req, res) => {
       return res.status(400).json({ error: 'Type must be set, add, or subtract' });
     }
 
-    // If user is warehouse, only allow their warehouse
-    if (role === 'warehouse' && parseInt(warehouseId) !== userId) {
+    // Warehouse can only modify their own inventory
+    if (parseInt(warehouseId) !== userId) {
       return res.status(403).json({ error: 'Access denied to this warehouse inventory' });
     }
 
@@ -116,7 +220,11 @@ const updateInventory = async (req, res) => {
     res.json({
       success: true,
       message: 'Inventory updated successfully',
-      data: { newQuantity }
+      data: { 
+        newQuantity,
+        updatedBy: 'warehouse',
+        warehouseId: userId
+      }
     });
   } catch (error) {
     console.error('Update inventory error:', error);
@@ -124,11 +232,18 @@ const updateInventory = async (req, res) => {
   }
 };
 
-// Bulk update inventory
+// Bulk update inventory - ONLY for warehouse users
 const bulkUpdateInventory = async (req, res) => {
   try {
     const { updates } = req.body;
     const { role, id: userId } = req.user;
+
+    // CRITICAL: Only warehouse users can modify inventory
+    if (role !== 'warehouse') {
+      return res.status(403).json({ 
+        error: 'Only warehouse users can modify inventory. Owners can only view inventory data.' 
+      });
+    }
 
     if (!Array.isArray(updates) || updates.length === 0) {
       return res.status(400).json({ error: 'Updates array is required' });
@@ -148,8 +263,8 @@ const bulkUpdateInventory = async (req, res) => {
         });
       }
 
-      // If user is warehouse, only allow their warehouse
-      if (role === 'warehouse' && parseInt(update.warehouseId) !== userId) {
+      // Warehouse can only modify their own inventory
+      if (parseInt(update.warehouseId) !== userId) {
         return res.status(403).json({ 
           error: 'Access denied to update inventory for other warehouses' 
         });
@@ -160,7 +275,12 @@ const bulkUpdateInventory = async (req, res) => {
 
     res.json({
       success: true,
-      message: `${updates.length} inventory records updated successfully`
+      message: `${updates.length} inventory records updated successfully`,
+      data: {
+        updatedBy: 'warehouse',
+        warehouseId: userId,
+        updatedCount: updates.length
+      }
     });
   } catch (error) {
     console.error('Bulk update inventory error:', error);
@@ -168,13 +288,13 @@ const bulkUpdateInventory = async (req, res) => {
   }
 };
 
-// Transfer inventory
+// Transfer inventory - ONLY for owner
 const transferInventory = async (req, res) => {
   try {
     const { fromWarehouseId, toWarehouseId, itemId, quantity } = req.body;
     const { role } = req.user;
 
-    // Only owner can transfer between warehouses
+    // CRITICAL: Only owner can transfer between warehouses
     if (role !== 'owner') {
       return res.status(403).json({ 
         error: 'Only owner can transfer inventory between warehouses' 
@@ -205,7 +325,14 @@ const transferInventory = async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Inventory transferred successfully'
+      message: 'Inventory transferred successfully',
+      data: {
+        transferredBy: 'owner',
+        fromWarehouseId,
+        toWarehouseId,
+        itemId,
+        quantity: parseInt(quantity)
+      }
     });
   } catch (error) {
     console.error('Transfer inventory error:', error);
@@ -233,7 +360,13 @@ const getInventoryStats = async (req, res) => {
 
     res.json({
       success: true,
-      data: stats
+      data: stats,
+      meta: {
+        userRole: role,
+        warehouseScope: role === 'warehouse' ? 'single' : 'all',
+        canModify: role === 'warehouse',
+        canTransfer: role === 'owner'
+      }
     });
   } catch (error) {
     console.error('Get inventory stats error:', error);
@@ -241,21 +374,27 @@ const getInventoryStats = async (req, res) => {
   }
 };
 
-// Get warehouse summary
+// Get warehouse summary - ONLY for owner
 const getWarehouseSummary = async (req, res) => {
   try {
     const { role } = req.user;
     
-    // Only owner can see all warehouse summary
+    // CRITICAL: Only owner can see all warehouse summary
     if (role !== 'owner') {
-      return res.status(403).json({ error: 'Access denied' });
+      return res.status(403).json({ 
+        error: 'Only owner can view warehouse summary across all warehouses' 
+      });
     }
 
     const summary = await InventoryModel.getWarehouseSummary();
 
     res.json({
       success: true,
-      data: summary
+      data: summary,
+      meta: {
+        userRole: role,
+        scope: 'all_warehouses'
+      }
     });
   } catch (error) {
     console.error('Get warehouse summary error:', error);
@@ -282,7 +421,13 @@ const getLowStockItems = async (req, res) => {
 
     res.json({
       success: true,
-      data: items
+      data: items,
+      meta: {
+        userRole: role,
+        threshold: parseInt(threshold),
+        warehouseScope: role === 'warehouse' ? 'single' : 'all',
+        canModify: role === 'warehouse'
+      }
     });
   } catch (error) {
     console.error('Get low stock items error:', error);
@@ -305,7 +450,12 @@ const getItemsWithoutInventory = async (req, res) => {
 
     res.json({
       success: true,
-      data: items
+      data: items,
+      meta: {
+        userRole: role,
+        warehouseId: parseInt(warehouseId),
+        canModify: role === 'warehouse'
+      }
     });
   } catch (error) {
     console.error('Get items without inventory error:', error);
@@ -313,14 +463,21 @@ const getItemsWithoutInventory = async (req, res) => {
   }
 };
 
-// Delete inventory
+// Delete inventory - ONLY for warehouse users
 const deleteInventory = async (req, res) => {
   try {
     const { warehouseId, itemId } = req.params;
     const { role, id: userId } = req.user;
 
-    // If user is warehouse, only allow their warehouse
-    if (role === 'warehouse' && parseInt(warehouseId) !== userId) {
+    // CRITICAL: Only warehouse users can modify inventory
+    if (role !== 'warehouse') {
+      return res.status(403).json({ 
+        error: 'Only warehouse users can modify inventory. Owners can only view inventory data.' 
+      });
+    }
+
+    // Warehouse can only modify their own inventory
+    if (parseInt(warehouseId) !== userId) {
       return res.status(403).json({ error: 'Access denied to this warehouse inventory' });
     }
 
@@ -332,7 +489,11 @@ const deleteInventory = async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Inventory record deleted successfully'
+      message: 'Inventory record deleted successfully',
+      data: {
+        deletedBy: 'warehouse',
+        warehouseId: userId
+      }
     });
   } catch (error) {
     console.error('Delete inventory error:', error);
@@ -360,7 +521,12 @@ const getInventoryHistory = async (req, res) => {
 
     res.json({
       success: true,
-      data: history
+      data: history,
+      meta: {
+        userRole: role,
+        days: parseInt(days),
+        canModify: role === 'warehouse'
+      }
     });
   } catch (error) {
     console.error('Get inventory history error:', error);
@@ -392,7 +558,12 @@ const checkAvailability = async (req, res) => {
 
     res.json({
       success: true,
-      data: availability
+      data: availability,
+      meta: {
+        userRole: role,
+        requestedQuantity: parseInt(quantity),
+        canModify: role === 'warehouse'
+      }
     });
   } catch (error) {
     console.error('Check availability error:', error);
@@ -404,6 +575,7 @@ module.exports = {
   getInventory,
   getItemInventory,
   getSpecificInventory,
+  addInventoryItem,
   updateInventory,
   bulkUpdateInventory,
   transferInventory,

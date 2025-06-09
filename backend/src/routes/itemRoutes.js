@@ -21,7 +21,7 @@ const {
 const { verifyToken, isOwner, isOwnerOrWarehouse } = require('../middlewares/authMiddleware');
 
 // Public/Basic routes (accessible by owner and warehouse)
-router.get('/', verifyToken, isOwnerOrWarehouse, getAllItems);
+router.get('/', getAllItems);
 router.get('/search', verifyToken, isOwnerOrWarehouse, searchItems);
 router.get('/stats', verifyToken, isOwnerOrWarehouse, getItemStats);
 router.get('/with-inventory', verifyToken, isOwnerOrWarehouse, getItemsWithInventory);
