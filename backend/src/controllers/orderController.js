@@ -7,7 +7,6 @@ const getAllOrders = async (req, res) => {
       warehouseId, 
       dealerId, 
       salesmanId, 
-      orderType,
       transportStatus, 
       paymentStatus, 
       search, 
@@ -23,7 +22,6 @@ const getAllOrders = async (req, res) => {
       warehouseId: warehouseId ? parseInt(warehouseId) : null,
       dealerId: dealerId ? parseInt(dealerId) : null,
       salesmanId: salesmanId ? parseInt(salesmanId) : null,
-      orderType,
       transportStatus,
       paymentStatus,
       search: search?.trim(),
@@ -40,12 +38,6 @@ const getAllOrders = async (req, res) => {
         page: parseInt(page),
         limit: parseInt(limit),
         total: orders.length
-      },
-      meta: {
-        userRole: role,
-        canCreateOrder: ['owner', 'warehouse', 'dealer', 'salesman'].includes(role),
-        canModifyOrder: ['owner', 'warehouse', 'dealer', 'salesman'].includes(role),
-        canDeleteOrder: ['owner', 'warehouse', 'dealer', 'salesman'].includes(role)
       }
     });
   } catch (error) {
@@ -63,20 +55,12 @@ const getOrderById = async (req, res) => {
     const order = await OrderModel.getOrderById(id, role, userId);
     
     if (!order) {
-      return res.status(404).json({ error: 'Order not found or access denied' });
+      return res.status(404).json({ error: 'Order not found' });
     }
-    
-    // Check if user can modify this order
-    const { canModify, reason } = await OrderModel.canModifyOrder(id, role, userId);
     
     res.json({
       success: true,
-      data: order,
-      meta: {
-        userRole: role,
-        canModify,
-        modifyReason: reason
-      }
+      data: order
     });
   } catch (error) {
     console.error('Get order error:', error);
@@ -84,128 +68,57 @@ const getOrderById = async (req, res) => {
   }
 };
 
-// Create order with proper role handling
+// Create order
 const createOrder = async (req, res) => {
   try {
-    const { warehouseId, dealerId, salesmanId, items } = req.body;
+    const { warehouseId, dealerId, salesmanId, items, notes } = req.body;
     const { role, id: userId } = req.user;
 
     // Validation
-    if (!items || !Array.isArray(items) || items.length === 0) {
+    if (!warehouseId || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ 
-        error: 'Items array is required' 
-      });
-    }
-
-    let targetWarehouseId = warehouseId;
-
-    // Role-specific validations and warehouse ID handling
-    if (role === 'warehouse') {
-      // Warehouse users: use their own warehouse ID
-      targetWarehouseId = userId;
-      
-      // Warehouse must specify a dealer
-      if (!dealerId) {
-        return res.status(400).json({ 
-          error: 'Dealer must be specified when warehouse creates order' 
-        });
-      }
-    } else if (role === 'dealer') {
-      // Dealer creates direct order - dealerId should be their own ID
-      if (dealerId && parseInt(dealerId) !== userId) {
-        return res.status(403).json({ 
-          error: 'Dealer can only create orders for themselves' 
-        });
-      }
-      
-      // Set dealerId to current user if not provided
-      req.body.dealerId = userId;
-      
-      // Dealer cannot specify salesman for direct orders
-      if (salesmanId) {
-        return res.status(400).json({ 
-          error: 'Dealer cannot specify salesman for direct orders' 
-        });
-      }
-      
-      // Dealer must specify warehouse
-      if (!warehouseId) {
-        return res.status(400).json({ 
-          error: 'Warehouse must be specified' 
-        });
-      }
-      targetWarehouseId = warehouseId;
-      
-    } else if (role === 'salesman') {
-      // Salesman must specify dealer and warehouse
-      if (!dealerId) {
-        return res.status(400).json({ 
-          error: 'Salesman must specify dealer when creating order' 
-        });
-      }
-      if (!warehouseId) {
-        return res.status(400).json({ 
-          error: 'Warehouse must be specified' 
-        });
-      }
-      
-      if (salesmanId && parseInt(salesmanId) !== userId) {
-        return res.status(403).json({ 
-          error: 'Salesman can only create orders as themselves' 
-        });
-      }
-      
-      // Set salesmanId to current user if not provided
-      req.body.salesmanId = userId;
-      targetWarehouseId = warehouseId;
-      
-    } else if (role === 'owner') {
-      // Owner needs warehouse and either dealer or salesman
-      if (!warehouseId || (!dealerId && !salesmanId)) {
-        return res.status(400).json({ 
-          error: 'Owner must specify warehouse and either dealer or salesman' 
-        });
-      }
-      targetWarehouseId = warehouseId;
-    }
-
-    // Final validation for warehouseId
-    if (!targetWarehouseId) {
-      return res.status(400).json({ 
-        error: 'Warehouse ID is required' 
+        error: 'Warehouse ID and items array are required' 
       });
     }
 
     // Validate items
     for (const item of items) {
-      if (!item.item_id || !item.quantity || !item.price_per_item) {
+      if (!item.itemId || !item.quantity || isNaN(item.quantity) || item.quantity <= 0) {
         return res.status(400).json({ 
-          error: 'Each item must have item_id, quantity, and price_per_item' 
-        });
-      }
-
-      if (isNaN(item.quantity) || item.quantity <= 0) {
-        return res.status(400).json({ 
-          error: 'Item quantities must be positive numbers' 
-        });
-      }
-
-      if (isNaN(item.price_per_item) || item.price_per_item <= 0) {
-        return res.status(400).json({ 
-          error: 'Item prices must be positive numbers' 
+          error: 'Each item must have valid itemId and quantity' 
         });
       }
     }
 
+    // Role-specific validations
+    if (role === 'dealer' && (!dealerId || parseInt(dealerId) !== userId)) {
+      return res.status(400).json({ error: 'Dealer ID mismatch' });
+    }
+
+    if (role === 'salesman') {
+      if (!salesmanId || parseInt(salesmanId) !== userId) {
+        return res.status(400).json({ error: 'Salesman ID mismatch' });
+      }
+      if (!dealerId) {
+        return res.status(400).json({ error: 'Salesman orders must specify a dealer' });
+      }
+    }
+
+    if (role === 'warehouse') {
+      if (!dealerId) {
+        return res.status(400).json({ error: 'Warehouse orders must specify a dealer' });
+      }
+      if (parseInt(warehouseId) !== userId) {
+        return res.status(400).json({ error: 'Warehouse ID mismatch' });
+      }
+    }
+
     const result = await OrderModel.createOrder({
-      warehouseId: parseInt(targetWarehouseId),
-      dealerId: req.body.dealerId ? parseInt(req.body.dealerId) : null,
-      salesmanId: req.body.salesmanId ? parseInt(req.body.salesmanId) : null,
-      items: items.map(item => ({
-        item_id: parseInt(item.item_id),
-        quantity: parseInt(item.quantity),
-        price_per_item: parseFloat(item.price_per_item)
-      }))
+      warehouseId: parseInt(warehouseId),
+      dealerId: dealerId ? parseInt(dealerId) : null,
+      salesmanId: salesmanId ? parseInt(salesmanId) : null,
+      items,
+      notes: notes?.trim() || null
     }, role, userId);
 
     res.status(201).json({
@@ -215,9 +128,9 @@ const createOrder = async (req, res) => {
     });
   } catch (error) {
     console.error('Create order error:', error);
-    if (error.message.includes('Insufficient inventory')) {
+    if (error.message.includes('not found') || error.message.includes('not active')) {
       res.status(400).json({ error: error.message });
-    } else if (error.message.includes('Invalid order configuration')) {
+    } else if (error.message.includes('mismatch') || error.message.includes('must specify')) {
       res.status(400).json({ error: error.message });
     } else {
       res.status(500).json({ error: 'Internal server error' });
@@ -229,48 +142,26 @@ const createOrder = async (req, res) => {
 const updateOrder = async (req, res) => {
   try {
     const { id } = req.params;
-    const { dealerId, salesmanId, items } = req.body;
+    const { items } = req.body;
     const { role, id: userId } = req.user;
 
-    // Check if user can modify this order
-    const { canModify, reason } = await OrderModel.canModifyOrder(id, role, userId);
-    
-    if (!canModify) {
-      return res.status(403).json({ error: reason });
+    // Validation
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ 
+        error: 'Items array is required' 
+      });
     }
 
-    // Validate items if provided
-    if (items && Array.isArray(items)) {
-      for (const item of items) {
-        if (!item.item_id || !item.quantity || !item.price_per_item) {
-          return res.status(400).json({ 
-            error: 'Each item must have item_id, quantity, and price_per_item' 
-          });
-        }
-
-        if (isNaN(item.quantity) || item.quantity <= 0) {
-          return res.status(400).json({ 
-            error: 'Item quantities must be positive numbers' 
-          });
-        }
-
-        if (isNaN(item.price_per_item) || item.price_per_item <= 0) {
-          return res.status(400).json({ 
-            error: 'Item prices must be positive numbers' 
-          });
-        }
+    // Validate items
+    for (const item of items) {
+      if (!item.itemId || !item.quantity || isNaN(item.quantity) || item.quantity <= 0) {
+        return res.status(400).json({ 
+          error: 'Each item must have valid itemId and quantity' 
+        });
       }
     }
 
-    await OrderModel.updateOrder(id, {
-      dealerId: dealerId ? parseInt(dealerId) : null,
-      salesmanId: salesmanId ? parseInt(salesmanId) : null,
-      items: items ? items.map(item => ({
-        item_id: parseInt(item.item_id),
-        quantity: parseInt(item.quantity),
-        price_per_item: parseFloat(item.price_per_item)
-      })) : null
-    }, role, userId);
+    await OrderModel.updateOrder(id, { items }, role, userId);
 
     res.json({
       success: true,
@@ -280,7 +171,7 @@ const updateOrder = async (req, res) => {
     console.error('Update order error:', error);
     if (error.message.includes('not found') || error.message.includes('access denied')) {
       res.status(404).json({ error: error.message });
-    } else if (error.message.includes('Cannot modify') || error.message.includes('Insufficient inventory')) {
+    } else if (error.message.includes('Cannot modify')) {
       res.status(400).json({ error: error.message });
     } else {
       res.status(500).json({ error: 'Internal server error' });
@@ -288,40 +179,35 @@ const updateOrder = async (req, res) => {
   }
 };
 
-// Update order status
-const updateOrderStatus = async (req, res) => {
+// Update transport status
+const updateTransportStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { transportStatus, paymentStatus } = req.body;
+    const { status } = req.body;
     const { role, id: userId } = req.user;
 
-    // Validate status values
-    if (transportStatus && !['pending', 'dispatched', 'delivered', 'cancelled'].includes(transportStatus)) {
+    // Validate status
+    const validStatuses = ['pending', 'dispatched', 'delivered', 'cancelled'];
+    if (!validStatuses.includes(status)) {
       return res.status(400).json({ 
-        error: 'Invalid transport status. Must be pending, dispatched, delivered, or cancelled' 
+        error: 'Invalid status. Must be: pending, dispatched, delivered, or cancelled' 
       });
     }
 
-    if (paymentStatus && !['pending', 'partial', 'paid'].includes(paymentStatus)) {
+    // Role-specific validation
+    if (role === 'dealer' && status !== 'delivered') {
       return res.status(400).json({ 
-        error: 'Invalid payment status. Must be pending, partial, or paid' 
+        error: 'Dealers can only mark orders as delivered' 
       });
     }
 
-    // Role-based restrictions for status updates
-    if (role === 'dealer' || role === 'salesman') {
-      // Dealers and salesmen can only update payment status, not transport status
-      if (transportStatus) {
-        return res.status(403).json({ 
-          error: 'Only warehouse and owner can update transport status' 
-        });
-      }
+    if (role === 'salesman') {
+      return res.status(403).json({ 
+        error: 'Salesmen cannot update transport status' 
+      });
     }
 
-    const affected = await OrderModel.updateOrderStatus(id, {
-      transportStatus,
-      paymentStatus
-    }, role, userId);
+    const affected = await OrderModel.updateTransportStatus(id, status, role, userId);
     
     if (affected === 0) {
       return res.status(404).json({ error: 'Order not found or access denied' });
@@ -329,11 +215,50 @@ const updateOrderStatus = async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Order status updated successfully'
+      message: 'Transport status updated successfully'
     });
   } catch (error) {
-    console.error('Update order status error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('Update transport status error:', error);
+    if (error.message.includes('Dealers can only')) {
+      res.status(400).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+};
+
+// Update payment status (warehouse and owner only)
+const updatePaymentStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    const { role, id: userId } = req.user;
+
+    // Validate status
+    const validStatuses = ['pending', 'partial', 'paid'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ 
+        error: 'Invalid status. Must be: pending, partial, or paid' 
+      });
+    }
+
+    const affected = await OrderModel.updatePaymentStatus(id, status, role, userId);
+    
+    if (affected === 0) {
+      return res.status(404).json({ error: 'Order not found or access denied' });
+    }
+
+    res.json({
+      success: true,
+      message: 'Payment status updated successfully'
+    });
+  } catch (error) {
+    console.error('Update payment status error:', error);
+    if (error.message.includes('Only warehouse users')) {
+      res.status(403).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: 'Internal server error' });
+    }
   }
 };
 
@@ -342,13 +267,6 @@ const deleteOrder = async (req, res) => {
   try {
     const { id } = req.params;
     const { role, id: userId } = req.user;
-
-    // Check if user can modify this order
-    const { canModify, reason } = await OrderModel.canModifyOrder(id, role, userId);
-    
-    if (!canModify) {
-      return res.status(403).json({ error: reason });
-    }
 
     await OrderModel.deleteOrder(id, role, userId);
 
@@ -371,22 +289,37 @@ const deleteOrder = async (req, res) => {
 // Get order statistics
 const getOrderStats = async (req, res) => {
   try {
-    const { warehouseId } = req.query;
+    const { warehouseId, dealerId, salesmanId } = req.query;
     const { role, id: userId } = req.user;
+    
+    let targetWarehouseId = warehouseId;
+    let targetDealerId = dealerId;
+    let targetSalesmanId = salesmanId;
+
+    // Role-based filtering
+    if (role === 'warehouse') {
+      targetWarehouseId = userId;
+      targetDealerId = null;
+      targetSalesmanId = null;
+    } else if (role === 'dealer') {
+      targetWarehouseId = null;
+      targetDealerId = userId;
+      targetSalesmanId = null;
+    } else if (role === 'salesman') {
+      targetWarehouseId = null;
+      targetDealerId = null;
+      targetSalesmanId = userId;
+    }
 
     const stats = await OrderModel.getOrderStats(
-      warehouseId ? parseInt(warehouseId) : null,
-      role,
-      userId
+      targetWarehouseId ? parseInt(targetWarehouseId) : null,
+      targetDealerId ? parseInt(targetDealerId) : null,
+      targetSalesmanId ? parseInt(targetSalesmanId) : null
     );
 
     res.json({
       success: true,
-      data: stats,
-      meta: {
-        userRole: role,
-        scope: role === 'owner' ? 'all' : 'filtered'
-      }
+      data: stats
     });
   } catch (error) {
     console.error('Get order stats error:', error);
@@ -394,53 +327,73 @@ const getOrderStats = async (req, res) => {
   }
 };
 
-// Get monthly sales data
-const getMonthlySales = async (req, res) => {
+// Get monthly order data
+const getMonthlyOrders = async (req, res) => {
   try {
     const { warehouseId, year = new Date().getFullYear() } = req.query;
     const { role, id: userId } = req.user;
+    
+    let targetWarehouseId = warehouseId;
+    if (role === 'warehouse') {
+      targetWarehouseId = userId;
+    }
 
-    const salesData = await OrderModel.getMonthlySales(
-      warehouseId ? parseInt(warehouseId) : null,
-      parseInt(year),
-      role,
-      userId
+    const orderData = await OrderModel.getMonthlyOrders(
+      targetWarehouseId ? parseInt(targetWarehouseId) : null,
+      parseInt(year)
     );
 
     res.json({
       success: true,
-      data: salesData,
-      meta: {
-        userRole: role,
-        year: parseInt(year)
-      }
+      data: orderData
     });
   } catch (error) {
-    console.error('Get monthly sales error:', error);
+    console.error('Get monthly orders error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
 
-// Get pending orders
-const getPendingOrders = async (req, res) => {
+// Get top customers
+const getTopCustomers = async (req, res) => {
   try {
     const { warehouseId, limit = 10 } = req.query;
     const { role, id: userId } = req.user;
+    
+    let targetWarehouseId = warehouseId;
+    if (role === 'warehouse') {
+      targetWarehouseId = userId;
+    }
 
-    const orders = await OrderModel.getPendingOrders(
-      warehouseId ? parseInt(warehouseId) : null,
-      parseInt(limit),
-      role,
-      userId
+    const customers = await OrderModel.getTopCustomers(
+      targetWarehouseId ? parseInt(targetWarehouseId) : null,
+      parseInt(limit)
     );
 
     res.json({
       success: true,
-      data: orders,
-      meta: {
-        userRole: role,
-        limit: parseInt(limit)
-      }
+      data: customers
+    });
+  } catch (error) {
+    console.error('Get top customers error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Get pending orders (for dashboard)
+const getPendingOrders = async (req, res) => {
+  try {
+    const { limit = 10 } = req.query;
+    const { role, id: userId } = req.user;
+
+    const filters = {
+      transportStatus: 'pending'
+    };
+
+    const orders = await OrderModel.getAllOrders(filters, role, userId);
+
+    res.json({
+      success: true,
+      data: orders.slice(0, parseInt(limit))
     });
   } catch (error) {
     console.error('Get pending orders error:', error);
@@ -448,98 +401,48 @@ const getPendingOrders = async (req, res) => {
   }
 };
 
-// Get orders by type
-const getOrdersByType = async (req, res) => {
-  try {
-    const { type } = req.params;
-    const { warehouseId } = req.query;
-    const { role, id: userId } = req.user;
-
-    if (!['direct_dealer', 'salesman_for_dealer', 'warehouse_for_dealer'].includes(type)) {
-      return res.status(400).json({ 
-        error: 'Invalid order type. Must be direct_dealer, salesman_for_dealer, or warehouse_for_dealer' 
-      });
-    }
-
-    // Role-based warehouse filtering
-    let targetWarehouseId = warehouseId;
-    if (role === 'warehouse') {
-      targetWarehouseId = userId;
-    }
-
-    const orders = await OrderModel.getOrdersByType(
-      type, 
-      targetWarehouseId ? parseInt(targetWarehouseId) : null
-    );
-
-    res.json({
-      success: true,
-      data: orders,
-      meta: {
-        orderType: type,
-        userRole: role
-      }
-    });
-  } catch (error) {
-    console.error('Get orders by type error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-};
-
-// Get user's order summary
-const getUserOrderSummary = async (req, res) => {
+// Get dispatched orders (for mobile app - dealer can mark as received)
+const getDispatchedOrders = async (req, res) => {
   try {
     const { role, id: userId } = req.user;
 
-    if (!['warehouse', 'dealer', 'salesman'].includes(role)) {
+    if (role !== 'dealer') {
       return res.status(403).json({ 
-        error: 'Only warehouse, dealer, and salesman can access order summary' 
+        error: 'Only dealers can view dispatched orders' 
       });
     }
 
-    const summary = await OrderModel.getOrdersSummaryByRole(role, userId);
+    const filters = {
+      transportStatus: 'dispatched',
+      dealerId: userId
+    };
+
+    const orders = await OrderModel.getAllOrders(filters, role, userId);
 
     res.json({
       success: true,
-      data: summary,
-      meta: {
-        userRole: role,
-        userId
-      }
+      data: orders
     });
   } catch (error) {
-    console.error('Get user order summary error:', error);
+    console.error('Get dispatched orders error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
 
-// Bulk update order status
-const bulkUpdateStatus = async (req, res) => {
+// Bulk update transport status
+const bulkUpdateTransportStatus = async (req, res) => {
   try {
-    const { orderIds, transportStatus, paymentStatus } = req.body;
+    const { orderIds, status } = req.body;
     const { role, id: userId } = req.user;
 
     if (!Array.isArray(orderIds) || orderIds.length === 0) {
       return res.status(400).json({ error: 'Order IDs array is required' });
     }
 
-    // Validate status values
-    if (transportStatus && !['pending', 'dispatched', 'delivered', 'cancelled'].includes(transportStatus)) {
+    const validStatuses = ['pending', 'dispatched', 'delivered', 'cancelled'];
+    if (!validStatuses.includes(status)) {
       return res.status(400).json({ 
-        error: 'Invalid transport status' 
-      });
-    }
-
-    if (paymentStatus && !['pending', 'partial', 'paid'].includes(paymentStatus)) {
-      return res.status(400).json({ 
-        error: 'Invalid payment status' 
-      });
-    }
-
-    // Role-based restrictions for status updates
-    if ((role === 'dealer' || role === 'salesman') && transportStatus) {
-      return res.status(403).json({ 
-        error: 'Only warehouse and owner can update transport status' 
+        error: 'Invalid status. Must be: pending, dispatched, delivered, or cancelled' 
       });
     }
 
@@ -548,10 +451,7 @@ const bulkUpdateStatus = async (req, res) => {
 
     for (const orderId of orderIds) {
       try {
-        const affected = await OrderModel.updateOrderStatus(orderId, {
-          transportStatus,
-          paymentStatus
-        }, role, userId);
+        const affected = await OrderModel.updateTransportStatus(orderId, status, role, userId);
         
         if (affected > 0) {
           successCount++;
@@ -570,30 +470,22 @@ const bulkUpdateStatus = async (req, res) => {
       errors: errors
     });
   } catch (error) {
-    console.error('Bulk update status error:', error);
+    console.error('Bulk update transport status error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
 
-// Generate invoice (placeholder for future implementation)
-const generateInvoice = async (req, res) => {
+// Generate order report (placeholder for future implementation)
+const generateOrderReport = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { role, id: userId } = req.user;
-
-    const order = await OrderModel.getOrderById(id, role, userId);
+    const { startDate, endDate, format = 'pdf' } = req.query;
     
-    if (!order) {
-      return res.status(404).json({ error: 'Order not found' });
-    }
-
-    // This would generate PDF invoice
+    // This would generate PDF/Excel report
     res.status(501).json({ 
-      error: 'Invoice generation not yet implemented',
-      data: order 
+      error: 'Order report generation not yet implemented' 
     });
   } catch (error) {
-    console.error('Generate invoice error:', error);
+    console.error('Generate order report error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -618,14 +510,15 @@ module.exports = {
   getOrderById,
   createOrder,
   updateOrder,
-  updateOrderStatus,
+  updateTransportStatus,
+  updatePaymentStatus,
   deleteOrder,
   getOrderStats,
-  getMonthlySales,
+  getMonthlyOrders,
+  getTopCustomers,
   getPendingOrders,
-  getOrdersByType,
-  getUserOrderSummary,
-  bulkUpdateStatus,
-  generateInvoice,
+  getDispatchedOrders,
+  bulkUpdateTransportStatus,
+  generateOrderReport,
   exportOrders
 };
