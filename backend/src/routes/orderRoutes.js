@@ -5,84 +5,101 @@ const {
   getOrderById,
   createOrder,
   updateOrder,
-  updateOrderStatus,
+  updateTransportStatus,
+  updatePaymentStatus,
   deleteOrder,
   getOrderStats,
-  getMonthlySales,
+  getMonthlyOrders,
+  getTopCustomers,
   getPendingOrders,
-  getOrdersByType,
-  getUserOrderSummary,
-  bulkUpdateStatus,
-  generateInvoice,
+  getDispatchedOrders,
+  bulkUpdateTransportStatus,
+  generateOrderReport,
   exportOrders
 } = require('../controllers/orderController');
 
-const { verifyToken, isOwner, isOwnerOrWarehouse, hasRole } = require('../middlewares/authMiddleware');
+const { 
+  verifyToken, 
+  isOwner, 
+  isWarehouse, 
+  isOwnerOrWarehouse,
+  isDealer,
+  isSalesman,
+  isSalesmanOrDealer,
+  hasRole
+} = require('../middlewares/authMiddleware');
 
 // ========================================
-// GENERAL ORDER ROUTES (All authenticated users can access based on their data)
+// GENERAL ORDER ROUTES (All authenticated users can view with role-based filtering)
 // ========================================
 
-// Get orders - Everyone can see their own orders
+// Get all orders (filtered by user role automatically)
 router.get('/', verifyToken, getAllOrders);
 
-// Get order by ID - Everyone can see orders they have access to
+// Get order by ID (with role-based access control)
 router.get('/:id', verifyToken, getOrderById);
 
-// Get order statistics - Everyone can see their own stats
-router.get('/stats', verifyToken, getOrderStats);
+// Get order statistics (role-based filtering)
+router.get('/stats/summary', verifyToken, getOrderStats);
 
-// Get monthly sales - Everyone can see their own data
-router.get('/monthly-sales', verifyToken, getMonthlySales);
+// Get monthly order data
+router.get('/stats/monthly', verifyToken, getMonthlyOrders);
 
-// Get pending orders - Everyone can see their own pending orders
-router.get('/pending', verifyToken, getPendingOrders);
+// Get top customers
+router.get('/stats/top-customers', verifyToken, getTopCustomers);
 
-// ========================================
-// ORDER CREATION ROUTES (Role-based access)
-// ========================================
-
-// Create order - Owner, Warehouse, Dealer, and Salesman can create orders
-router.post('/', verifyToken, hasRole(['owner', 'warehouse', 'dealer', 'salesman']), createOrder);
+// Get pending orders (for dashboard)
+router.get('/status/pending', verifyToken, getPendingOrders);
 
 // ========================================
-// ORDER MODIFICATION ROUTES (Role-based access with business logic)
+// ORDER CREATION ROUTES (Warehouse, Dealer, Salesman can create)
 // ========================================
 
-// Update order - All roles can update their own orders (before dispatch)
-router.put('/:id', verifyToken, hasRole(['owner', 'warehouse', 'dealer', 'salesman']), updateOrder);
-
-// Update order status - Different permissions for different statuses
-router.patch('/:id/status', verifyToken, hasRole(['owner', 'warehouse', 'dealer', 'salesman']), updateOrderStatus);
-
-// Delete order - All roles can delete their own orders (before dispatch)
-router.delete('/:id', verifyToken, hasRole(['owner', 'warehouse', 'dealer', 'salesman']), deleteOrder);
+// Create order - Warehouse, Dealer, and Salesman can create orders
+router.post('/', verifyToken, hasRole(['warehouse', 'dealer', 'salesman']), createOrder);
 
 // ========================================
-// ADVANCED ORDER ROUTES
+// ORDER MODIFICATION ROUTES (Role-based permissions)
 // ========================================
 
-// Get orders by type - Owner and Warehouse can filter by order type
-router.get('/type/:type', verifyToken, isOwnerOrWarehouse, getOrdersByType);
+// Update order - Only before dispatch, by creator or warehouse
+router.put('/:id', verifyToken, hasRole(['warehouse', 'dealer', 'salesman']), updateOrder);
 
-// Get user's order summary - Warehouse, Dealer, and Salesman can see their summary
-router.get('/summary/user', verifyToken, hasRole(['warehouse', 'dealer', 'salesman']), getUserOrderSummary);
-
-// ========================================
-// BULK OPERATIONS (Role-based permissions)
-// ========================================
-
-// Bulk update order status - All roles can bulk update their accessible orders
-router.patch('/bulk/status', verifyToken, hasRole(['owner', 'warehouse', 'dealer', 'salesman']), bulkUpdateStatus);
+// Delete order - Only before dispatch, by creator or warehouse
+router.delete('/:id', verifyToken, hasRole(['warehouse', 'dealer', 'salesman']), deleteOrder);
 
 // ========================================
-// DOCUMENT GENERATION AND EXPORT
+// STATUS UPDATE ROUTES (Different permissions for different roles)
 // ========================================
 
-// Generate invoice - All roles can generate invoices for their accessible orders
-router.get('/:id/invoice', verifyToken, hasRole(['owner', 'warehouse', 'dealer', 'salesman']), generateInvoice);
+// Update transport status
+// - Warehouse: Can set any status (pending, dispatched, delivered, cancelled)
+// - Dealer: Can only mark as delivered (when they receive the order)
+// - Salesman: Cannot update transport status
+// - Owner: Can set any status
+router.patch('/:id/transport-status', verifyToken, hasRole(['owner', 'warehouse', 'dealer']), updateTransportStatus);
 
-// Export orders - Owner and Warehouse can export order data
+// Update payment status - Only warehouse and owner
+router.patch('/:id/payment-status', verifyToken, isOwnerOrWarehouse, updatePaymentStatus);
+
+// Bulk update transport status
+router.patch('/bulk/transport-status', verifyToken, hasRole(['owner', 'warehouse', 'dealer']), bulkUpdateTransportStatus);
+
+// ========================================
+// DEALER-SPECIFIC ROUTES (Mobile App)
+// ========================================
+
+// Get dispatched orders for dealer (so they can mark as received)
+router.get('/dealer/dispatched', verifyToken, isDealer, getDispatchedOrders);
+
+// ========================================
+// OWNER/WAREHOUSE REPORTING ROUTES
+// ========================================
+
+// Generate order reports (Owner and Warehouse only)
+router.get('/reports/generate', verifyToken, isOwnerOrWarehouse, generateOrderReport);
+
+// Export orders (Owner and Warehouse only)
 router.get('/export/:format', verifyToken, isOwnerOrWarehouse, exportOrders);
 
 module.exports = router;
